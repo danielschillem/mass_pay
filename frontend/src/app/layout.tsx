@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "MassPay BF — Plateforme de virement en masse",
+  title: "MynaPay BF | Plateforme de virement en masse",
   description: "Disbursement mobile money B2B · Orange Money + Moov Africa · Burkina Faso",
 };
 

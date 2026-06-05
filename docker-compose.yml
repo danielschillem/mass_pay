@@ -87,7 +87,7 @@ services:
         condition: service_healthy
     environment:
       NEXT_PUBLIC_API_URL: http://localhost:8080/api/v1
-      NEXT_PUBLIC_APP_NAME: MassPay BF
+      NEXT_PUBLIC_APP_NAME: MynaPay BF
     ports:
       - "3000:3000"
 

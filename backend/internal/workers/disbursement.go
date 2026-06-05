@@ -143,10 +143,9 @@ func (w *worker) scheduleRetry(ctx context.Context, job services.DisbursementJob
 	log.Printf("[worker] RETRY item %s — tentative %d dans %.0fs (raison: %s)",
 		job.BatchItemID, job.Attempt, delaySeconds, reason)
 
-	return w.bs.RetryItem(job.BatchItemID) // marque comme retrying dans la DB
-	// TODO: utiliser rdb.ZAdd(ctx, services.QueueRetry, redis.Z{Score: float64(readyAt.Unix()), Member: data})
-	_ = data
-	_ = readyAt
+	if err := w.bs.RetryItem(job.BatchItemID); err != nil {
+		return err
+	}
 	return w.rdb.ZAdd(ctx, services.QueueRetry, redis.Z{
 		Score:  float64(readyAt.Unix()),
 		Member: string(data),

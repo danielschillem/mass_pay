@@ -1,4 +1,4 @@
-# MassPay BF — Plateforme de virement en masse
+# MynaPay BF — Plateforme de virement en masse
 
 Plateforme B2B multi-tenant de disbursement mobile money (Orange Money + Moov Money) pour le Burkina Faso.
 

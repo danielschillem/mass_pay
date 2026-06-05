@@ -133,6 +133,7 @@ export interface LoginResponse {
     full_name: string;
     role: UserRole;
     tenant_id: string | null;
+    tenant_name: string;
   };
 }
 
@@ -147,6 +148,35 @@ export interface CreateBatchRequest {
   label: string;
   type: BatchType;
   items: CreateBatchItemInput[];
+}
+
+export interface CreateUserRequest {
+  email: string;
+  password: string;
+  first_name: string;
+  last_name: string;
+  role: UserRole;
+}
+
+export interface UpdateUserRequest {
+  first_name?: string;
+  last_name?: string;
+  role?: UserRole;
+  is_active?: boolean;
+}
+
+export interface UpdateBeneficiaryRequest {
+  full_name?: string;
+  group_name?: string;
+  default_amount?: number;
+  external_ref?: string;
+}
+
+export interface TenantDetail {
+  tenant: Tenant;
+  user_count: number;
+  benef_count: number;
+  batch_count: number;
 }
 
 export interface PaginatedResponse<T> {

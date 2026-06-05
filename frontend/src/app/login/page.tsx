@@ -1,7 +1,8 @@
 "use client";
+
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Layers, Eye, EyeOff } from "lucide-react";
+import { Eye, EyeOff, Layers } from "lucide-react";
 import { api, auth } from "@/lib/api";
 
 export default function LoginPage() {
@@ -21,11 +22,8 @@ export default function LoginPage() {
       auth.setToken(res.access_token);
       localStorage.setItem("masspay_role", res.user.role);
       localStorage.setItem("masspay_user", JSON.stringify(res.user));
-      if (res.user.role === "super_admin") {
-        router.push("/admin");
-      } else {
-        router.push("/dashboard");
-      }
+      localStorage.setItem("masspay_tenant_name", res.user.tenant_name ?? "");
+      router.push(res.user.role === "super_admin" ? "/admin" : "/dashboard");
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erreur de connexion");
     } finally {
@@ -33,83 +31,133 @@ export default function LoginPage() {
     }
   };
 
+  const disabled = loading || !email || !password;
+
   return (
-    <div style={{ background:"#07090F", minHeight:"100vh", display:"flex",
-      alignItems:"center", justifyContent:"center", fontFamily:"'DM Sans',sans-serif" }}>
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Sora:wght@700;800&family=DM+Sans:wght@400;500;600&display=swap');`}</style>
-
-      <div style={{ width:"100%", maxWidth:420, padding:"0 24px" }}>
-        {/* Logo */}
-        <div style={{ display:"flex", alignItems:"center", gap:10, justifyContent:"center", marginBottom:36 }}>
-          <div style={{ width:40, height:40, background:"#E4A730", borderRadius:11,
-            display:"flex", alignItems:"center", justifyContent:"center" }}>
-            <Layers size={20} color="#000" />
+    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center",
+      justifyContent:"center", padding:24, fontFamily:"'DM Sans',sans-serif" }}>
+      <div style={{ width:"100%", maxWidth:980, display:"grid",
+        gridTemplateColumns:"minmax(320px, 420px) minmax(320px, 1fr)",
+        gap:28, alignItems:"stretch" }}>
+        <section style={{ background:"var(--card)", border:"1px solid var(--border)",
+          borderRadius:20, padding:32, boxShadow:"var(--shadow)" }}>
+          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:36 }}>
+            <div style={{ width:42, height:42, background:"var(--gold)", borderRadius:12,
+              display:"flex", alignItems:"center", justifyContent:"center",
+              boxShadow:"0 12px 26px rgba(199,131,18,.22)" }}>
+              <Layers size={21} color="#fff" />
+            </div>
+            <span style={{ fontFamily:"'Sora',sans-serif", fontWeight:800,
+              fontSize:22, color:"var(--text)" }}>
+              MynaPay<span style={{ color:"var(--gold)" }}>BF</span>
+            </span>
           </div>
-          <span style={{ fontFamily:"'Sora',sans-serif", fontWeight:800, fontSize:22, color:"#E4EAF8" }}>
-            MassPay<span style={{ color:"#E4A730" }}>BF</span>
-          </span>
-        </div>
 
-        <div style={{ background:"#111827", border:"1px solid #1C2840", borderRadius:16, padding:32 }}>
-          <h1 style={{ fontFamily:"'Sora',sans-serif", fontSize:20, fontWeight:700,
-            color:"#E4EAF8", margin:"0 0 4px" }}>Connexion</h1>
-          <p style={{ color:"#5A6888", fontSize:13, margin:"0 0 24px" }}>Plateforme de virement en masse</p>
+          <h1 style={{ fontFamily:"'Sora',sans-serif", fontSize:22,
+            fontWeight:800, color:"var(--text)", margin:"0 0 6px" }}>
+            Connexion
+          </h1>
+          <p style={{ color:"var(--sub)", fontSize:13, margin:"0 0 24px" }}>
+            Plateforme de virement en masse
+          </p>
 
           {error && (
-            <div style={{ background:"rgba(240,82,82,.13)", border:"1px solid rgba(240,82,82,.3)",
-              borderRadius:10, padding:"10px 14px", marginBottom:16, color:"#F05252", fontSize:13 }}>
+            <div style={{ background:"var(--red-sub)", border:"1px solid var(--red-border)",
+              borderRadius:12, padding:"11px 14px", marginBottom:16,
+              color:"var(--red)", fontSize:13, fontWeight:600 }}>
               {error}
             </div>
           )}
 
           <div style={{ marginBottom:16 }}>
-            <label style={{ color:"#98A5C4", fontSize:11, fontWeight:700, textTransform:"uppercase",
-              letterSpacing:".5px", display:"block", marginBottom:7 }}>Adresse email</label>
+            <label style={{ color:"var(--mid)", fontSize:11, fontWeight:800,
+              textTransform:"uppercase", letterSpacing:".5px", display:"block", marginBottom:7 }}>
+              Adresse email
+            </label>
             <input
               type="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleLogin()}
               placeholder="admin@entreprise.bf"
-              style={{ width:"100%", background:"#172035", border:"1px solid #1C2840",
-                borderRadius:10, padding:"11px 14px", color:"#E4EAF8",
-                fontSize:14, outline:"none", boxSizing:"border-box" }}
+              style={{ width:"100%", background:"var(--elevated)",
+                border:"1px solid var(--border)", borderRadius:12,
+                padding:"12px 14px", color:"var(--text)", fontSize:14,
+                outline:"none", boxSizing:"border-box" }}
             />
           </div>
 
           <div style={{ marginBottom:24, position:"relative" }}>
-            <label style={{ color:"#98A5C4", fontSize:11, fontWeight:700, textTransform:"uppercase",
-              letterSpacing:".5px", display:"block", marginBottom:7 }}>Mot de passe</label>
+            <label style={{ color:"var(--mid)", fontSize:11, fontWeight:800,
+              textTransform:"uppercase", letterSpacing:".5px", display:"block", marginBottom:7 }}>
+              Mot de passe
+            </label>
             <input
               type={showPwd ? "text" : "password"}
               value={password}
               onChange={e => setPassword(e.target.value)}
               onKeyDown={e => e.key === "Enter" && handleLogin()}
-              placeholder="••••••••"
-              style={{ width:"100%", background:"#172035", border:"1px solid #1C2840",
-                borderRadius:10, padding:"11px 40px 11px 14px", color:"#E4EAF8",
-                fontSize:14, outline:"none", boxSizing:"border-box" }}
+              placeholder="********"
+              style={{ width:"100%", background:"var(--elevated)",
+                border:"1px solid var(--border)", borderRadius:12,
+                padding:"12px 42px 12px 14px", color:"var(--text)", fontSize:14,
+                outline:"none", boxSizing:"border-box" }}
             />
-            <button onClick={() => setShowPwd(!showPwd)}
-              style={{ position:"absolute", right:12, top:34, background:"transparent",
-                border:"none", cursor:"pointer", padding:0, color:"#5A6888" }}>
-              {showPwd ? <EyeOff size={16} /> : <Eye size={16} />}
+            <button type="button" onClick={() => setShowPwd(!showPwd)}
+              style={{ position:"absolute", right:12, top:35, background:"transparent",
+                border:"none", cursor:"pointer", padding:0, color:"var(--sub)" }}>
+              {showPwd ? <EyeOff size={17} /> : <Eye size={17} />}
             </button>
           </div>
 
-          <button onClick={handleLogin} disabled={loading || !email || !password}
-            style={{ width:"100%", background: loading || !email || !password ? "#172035" : "#E4A730",
-              color: loading || !email || !password ? "#5A6888" : "#000",
-              border:"none", padding:"12px", borderRadius:10, fontWeight:700,
-              fontSize:15, cursor: loading || !email || !password ? "not-allowed" : "pointer",
-              fontFamily:"'Sora',sans-serif", transition:"all .2s" }}>
-            {loading ? "Connexion…" : "Se connecter"}
+          <button type="button" onClick={handleLogin} disabled={disabled}
+            style={{ width:"100%", background: disabled ? "var(--elevated)" : "var(--gold)",
+              color: disabled ? "var(--sub)" : "#fff", border:"none",
+              padding:"13px", borderRadius:12, fontWeight:800, fontSize:15,
+              cursor: disabled ? "not-allowed" : "pointer",
+              fontFamily:"'Sora',sans-serif",
+              boxShadow: disabled ? "none" : "0 12px 28px rgba(199,131,18,.22)" }}>
+            {loading ? "Connexion..." : "Se connecter"}
           </button>
-        </div>
+        </section>
 
-        <p style={{ textAlign:"center", color:"#5A6888", fontSize:12, marginTop:20 }}>
-          MassPay BF · Plateforme B2B de disbursement
-        </p>
+        <section style={{ border:"1px solid var(--border)", borderRadius:20,
+          background:"linear-gradient(135deg,rgba(255,255,255,.94),rgba(241,245,251,.84))",
+          boxShadow:"var(--shadow)", padding:32, display:"flex",
+          flexDirection:"column", justifyContent:"space-between", minHeight:420 }}>
+          <div>
+            <div style={{ color:"var(--gold)", fontSize:12, fontWeight:800,
+              textTransform:"uppercase", letterSpacing:".6px", marginBottom:14 }}>
+              Console de paiement
+            </div>
+            <h2 style={{ color:"var(--text)", fontFamily:"'Sora',sans-serif",
+              fontSize:32, lineHeight:1.12, margin:"0 0 14px", maxWidth:430 }}>
+              Pilotez vos virements de masse avec une interface claire.
+            </h2>
+            <p style={{ color:"var(--mid)", fontSize:15, lineHeight:1.7,
+              margin:0, maxWidth:470 }}>
+              Suivi KYB, provisions wallet, batchs, beneficiaires et validations sont regroupes dans un espace pense pour l'execution quotidienne.
+            </p>
+          </div>
+
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)",
+            gap:12, marginTop:28 }}>
+            {["KYB", "Wallet", "Batchs"].map(label => (
+              <div key={label} style={{ background:"var(--card)",
+                border:"1px solid var(--border)", borderRadius:14,
+                padding:"14px 12px", boxShadow:"var(--shadow-sm)" }}>
+                <div style={{ color:"var(--sub)", fontSize:11, fontWeight:800,
+                  textTransform:"uppercase", letterSpacing:".5px" }}>
+                  {label}
+                </div>
+                <div style={{ color:"var(--text)", fontSize:13,
+                  fontWeight:800, marginTop:6 }}>
+                  Operationnel
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

@@ -1,8 +1,9 @@
 import type {
   LoginRequest, LoginResponse,
-  Tenant, Wallet, Batch, Beneficiary,
+  Tenant, TenantDetail, Wallet, WalletTransaction, Batch, Beneficiary, User,
   CreateBatchRequest, PaginatedResponse,
   DashboardStats, GlobalStats,
+  CreateUserRequest, UpdateUserRequest, UpdateBeneficiaryRequest,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";
@@ -67,9 +68,13 @@ export const api = {
     stats: () => get<GlobalStats>("/admin/stats"),
     tenants: (page = 1, size = 20, status?: string) =>
       get<PaginatedResponse<Tenant>>(`/admin/tenants?page=${page}&size=${size}${status ? `&status=${status}` : ""}`),
-    createTenant: (data: unknown) => post<Tenant>("/admin/tenants", data),
+    getTenant:    (id: string) => get<TenantDetail>(`/admin/tenants/${id}`),
+    createTenant: (data: unknown) => post<{ tenant: Tenant }>("/admin/tenants", data),
+    updateTenant: (id: string, data: unknown) => patch<Tenant>(`/admin/tenants/${id}`, data),
     activate: (id: string) => patch<{ message: string }>(`/admin/tenants/${id}/activate`),
     suspend:  (id: string) => patch<{ message: string }>(`/admin/tenants/${id}/suspend`),
+    rechargeWallet: (tenantId: string, amount: number, reference: string) =>
+      post<{ message: string; wallet: Wallet }>(`/admin/tenants/${tenantId}/wallet/recharge`, { amount, reference }),
   },
 
   // Tenant
@@ -88,7 +93,19 @@ export const api = {
     // Bénéficiaires
     beneficiaries: (page = 1, size = 50, q = "") =>
       get<PaginatedResponse<Beneficiary>>(`/tenant/beneficiaries?page=${page}&size=${size}&q=${q}`),
-    createBeneficiary: (data: unknown) => post<Beneficiary>("/tenant/beneficiaries", data),
-    deleteBeneficiary: (id: string) => del<{ message: string }>(`/tenant/beneficiaries/${id}`),
+    createBeneficiary:  (data: unknown) => post<Beneficiary>("/tenant/beneficiaries", data),
+    updateBeneficiary:  (id: string, data: UpdateBeneficiaryRequest) =>
+      patch<Beneficiary>(`/tenant/beneficiaries/${id}`, data),
+    deleteBeneficiary:  (id: string) => del<{ message: string }>(`/tenant/beneficiaries/${id}`),
+
+    // Wallet transactions
+    walletTransactions: (page = 1, size = 20) =>
+      get<PaginatedResponse<WalletTransaction>>(`/tenant/wallet/transactions?page=${page}&size=${size}`),
+
+    // Équipe (users)
+    users:       () => get<{ data: User[]; total: number }>("/tenant/users"),
+    createUser:  (data: CreateUserRequest) => post<User>("/tenant/users", data),
+    updateUser:  (id: string, data: UpdateUserRequest) => patch<User>(`/tenant/users/${id}`, data),
+    deleteUser:  (id: string) => del<{ message: string }>(`/tenant/users/${id}`),
   },
 };

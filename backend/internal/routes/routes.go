@@ -33,7 +33,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 
 	// Healthcheck
 	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "MassPay BF"})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "MynaPay BF"})
 	})
 
 	authH   := handlers.NewAuthHandler(db, cfg)
@@ -59,8 +59,11 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 		{
 			tenants.GET("", adminH.ListTenants)
 			tenants.POST("", adminH.CreateTenant)
+			tenants.GET("/:tenantId", adminH.GetTenant)
+			tenants.PATCH("/:tenantId", adminH.UpdateTenant)
 			tenants.PATCH("/:tenantId/activate", adminH.ActivateTenant)
 			tenants.PATCH("/:tenantId/suspend", adminH.SuspendTenant)
+			tenants.POST("/:tenantId/wallet/recharge", adminH.RechargeWallet)
 		}
 	}
 
@@ -109,9 +112,34 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin, models.RoleTenantManager),
 				tenantH.CreateBeneficiary,
 			)
+			benef.PATCH("/:beneficiaryId",
+				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin, models.RoleTenantManager),
+				tenantH.UpdateBeneficiary,
+			)
 			benef.DELETE("/:beneficiaryId",
 				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin),
 				tenantH.DeleteBeneficiary,
+			)
+		}
+
+		// Transactions wallet
+		tenant.GET("/wallet/transactions", tenantH.ListWalletTransactions)
+
+		// Gestion équipe
+		users := tenant.Group("/users")
+		{
+			users.GET("", tenantH.ListUsers)
+			users.POST("",
+				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin),
+				tenantH.CreateUser,
+			)
+			users.PATCH("/:userId",
+				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin),
+				tenantH.UpdateUser,
+			)
+			users.DELETE("/:userId",
+				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin),
+				tenantH.DeleteUser,
 			)
 		}
 	}

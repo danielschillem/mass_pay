@@ -23,7 +23,7 @@ func main() {
 	// Serveur HTTP
 	r := routes.Setup(db, rdb, cfg)
 
-	log.Printf("[server] MassPay BF démarré sur :%s", cfg.Port)
+	log.Printf("[server] MynaPay BF démarré sur :%s", cfg.Port)
 	if err := r.Run(":" + cfg.Port); err != nil {
 		log.Fatalf("[server] erreur fatale: %v", err)
 	}

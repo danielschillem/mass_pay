@@ -21,9 +21,9 @@ export default function HomePage() {
   }, [router]);
 
   return (
-    <div style={{ background: "#07090F", minHeight: "100vh", display: "flex",
+    <div style={{ background: "var(--bg)", minHeight: "100vh", display: "flex",
       alignItems: "center", justifyContent: "center" }}>
-      <div style={{ width: 32, height: 32, border: "3px solid #E4A730",
+      <div style={{ width: 32, height: 32, border: "3px solid var(--gold)",
         borderTopColor: "transparent", borderRadius: "50%",
         animation: "spin 0.8s linear infinite" }} />
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
