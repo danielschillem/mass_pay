@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap');
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg:       #07090F;
+  --surf:     #0C1020;
+  --card:     #111827;
+  --elevated: #172035;
+  --border:   #1C2840;
+  --border-hi:#283A60;
+  --gold:     #E4A730;
+  --gold-sub: rgba(228,167,48,.13);
+  --green:    #0DC98A;
+  --green-sub:rgba(13,201,138,.13);
+  --red:      #F05252;
+  --red-sub:  rgba(240,82,82,.13);
+  --blue:     #4B7BFF;
+  --blue-sub: rgba(75,123,255,.13);
+  --text:     #E4EAF8;
+  --mid:      #98A5C4;
+  --sub:      #5A6888;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: 'DM Sans', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, h4, .font-display {
+  font-family: 'Sora', sans-serif;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+
+/* Remove number input arrows */
+input[type="number"] { -moz-appearance: textfield; }
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
+
+/* Input focus ring */
+input:focus, select:focus, textarea:focus {
+  outline: none;
+  border-color: var(--gold) !important;
+}
+
+@layer components {
+  .card {
+    @apply rounded-2xl border;
+    background: var(--card);
+    border-color: var(--border);
+  }
+  .btn-primary {
+    @apply font-bold rounded-xl transition-all duration-200 cursor-pointer flex items-center gap-2;
+    background: var(--gold);
+    color: #000;
+    border: none;
+  }
+  .btn-primary:disabled {
+    background: var(--elevated);
+    color: var(--sub);
+    cursor: not-allowed;
+  }
+  .btn-ghost {
+    @apply font-semibold rounded-xl transition-all duration-200 cursor-pointer flex items-center gap-2;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    color: var(--mid);
+  }
+  .input {
+    @apply w-full rounded-xl text-sm;
+    background: var(--elevated);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 14px;
+  }
+  .table-row-hover:hover {
+    background: rgba(255,255,255,.02);
+  }
+}
