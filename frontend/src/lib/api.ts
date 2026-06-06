@@ -58,6 +58,7 @@ async function req<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const isLoginRequest = path === "/auth/login";
   const token = auth.getToken();
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -68,7 +69,7 @@ async function req<T>(
   let res = await fetch(`${BASE}${path}`, { ...options, headers });
 
   // Auto-refresh sur 401 — une seule tentative concurrente
-  if (res.status === 401 && auth.getRefreshToken()) {
+  if (res.status === 401 && !isLoginRequest && auth.getRefreshToken()) {
     if (!refreshPromise) {
       refreshPromise = doRefresh();
     }
@@ -82,9 +83,14 @@ async function req<T>(
   }
 
   if (res.status === 401) {
-    auth.clear();
-    if (typeof window !== "undefined") window.location.href = "/login";
-    throw new Error("Session expirée");
+    const body = await res.json().catch(() => ({}));
+    if (!isLoginRequest) {
+      auth.clear();
+      if (typeof window !== "undefined") window.location.href = "/login";
+    }
+    throw new Error(
+      body.error ?? (isLoginRequest ? "identifiants invalides" : "Session expirée")
+    );
   }
 
   if (!res.ok) {
