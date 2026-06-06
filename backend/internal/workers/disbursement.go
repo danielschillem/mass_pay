@@ -16,6 +16,7 @@ import (
 	"masspay-bf/internal/config"
 	"masspay-bf/internal/gateway"
 	"masspay-bf/internal/handlers"
+	"masspay-bf/internal/models"
 	"masspay-bf/internal/services"
 )
 
@@ -90,6 +91,9 @@ type worker struct {
 	failed    *atomic.Int64
 	success   *atomic.Int64
 	running   bool
+
+	gatewayFactory func(models.Operator, *config.Config) gateway.Gateway
+	enqueueRetry   func(context.Context, string, time.Time) error
 }
 
 func (w *worker) run(id int) {
@@ -128,7 +132,7 @@ func (w *worker) process(ctx context.Context, job services.DisbursementJob) erro
 		"attempt": job.Attempt + 1,
 	}).Info("processing item")
 
-	gw := gateway.New(job.Operator, w.cfg)
+	gw := w.newGateway(job.Operator)
 
 	var resp *gateway.SendResponse
 	var err error
@@ -213,10 +217,21 @@ func (w *worker) scheduleRetry(ctx context.Context, job services.DisbursementJob
 	if err := w.bs.RetryItem(job.BatchItemID); err != nil {
 		return err
 	}
+	if w.enqueueRetry != nil {
+		return w.enqueueRetry(ctx, string(data), readyAt)
+	}
+
 	return w.rdb.ZAdd(ctx, services.QueueRetry, redis.Z{
 		Score:  float64(readyAt.Unix()),
 		Member: string(data),
 	}).Err()
+}
+
+func (w *worker) newGateway(op models.Operator) gateway.Gateway {
+	if w.gatewayFactory != nil {
+		return w.gatewayFactory(op, w.cfg)
+	}
+	return gateway.New(op, w.cfg)
 }
 
 func (w *worker) retryScheduler() {
