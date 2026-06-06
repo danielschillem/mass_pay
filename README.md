@@ -5,9 +5,9 @@ Plateforme B2B multi-tenant de disbursement mobile money (Orange Money + Moov Mo
 ## Architecture
 
 ```
-masspay-platform/
-├── backend/          Go 1.22 + Gin + PostgreSQL + Redis
-├── frontend/         Next.js 15 + TypeScript + Tailwind CSS
+mynapay-platform/
+├── backend/          Go 1.25 + Gin + PostgreSQL + Redis
+├── frontend/         Next.js 16 + TypeScript + Tailwind CSS
 └── docker-compose.yml
 ```
 
@@ -15,10 +15,10 @@ masspay-platform/
 
 | Couche       | Technologie                          |
 |--------------|--------------------------------------|
-| Backend      | Go 1.22 · Gin · GORM · JWT           |
+| Backend      | Go 1.25 · Gin · GORM · JWT           |
 | Base données | PostgreSQL 16                        |
 | Cache/Queue  | Redis 7                              |
-| Frontend     | Next.js 15 · TypeScript · Tailwind   |
+| Frontend     | Next.js 16 · TypeScript · Tailwind   |
 | Mobile (à venir) | Flutter                          |
 | Paiements    | Orange Money BF · Moov Africa BF     |
 
@@ -56,7 +56,8 @@ docker-compose up -d
 
 - Frontend : http://localhost:3000
 - Backend API : http://localhost:8080
-- API docs : http://localhost:8080/health
+- Health check : http://localhost:8080/health
+- Compte super admin dev : `admin@mynapay.bf` / `MynaPay@2026!`
 
 Si l'interface ne correspond pas au code local, reconstruire et recréer les services applicatifs :
 
@@ -85,6 +86,8 @@ cp .env.local.example .env.local
 npm install
 npm run dev
 ```
+
+Sur Windows, le script `npm run dev` force Webpack pour éviter les bindings natifs Turbopack manquants.
 
 ---
 
@@ -164,6 +167,9 @@ DELETE /api/v1/tenant/beneficiaries/:id
 JWT_SECRET=         # min 32 caractères — OBLIGATOIRE
 DATABASE_URL=       # PostgreSQL DSN
 REDIS_URL=          # Redis URL
+SEED_SUPER_ADMIN=   # true en dev Docker, false recommandé en production
+SUPER_ADMIN_EMAIL=
+SUPER_ADMIN_PASSWORD=
 ORANGE_API_KEY=     # Clé API Orange Money BF
 MOOV_API_KEY=       # Clé API Moov Africa BF
 DEFAULT_COMMISSION_RATE=0.015
