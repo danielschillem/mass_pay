@@ -13,7 +13,7 @@ services:
       - postgres_data:/var/lib/postgresql/data
       - ./backups:/backups:ro
     ports:
-      - "5432:5432"
+      - "${POSTGRES_PORT_BIND:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U masspay -d masspay_bf"]
       interval: 10s
@@ -29,7 +29,7 @@ services:
     volumes:
       - redis_data:/data
     ports:
-      - "6379:6379"
+      - "${REDIS_PORT_BIND:-6379}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -87,7 +87,7 @@ services:
       MOOV_USERNAME: ${MOOV_USERNAME:-}
       MOOV_PASSWORD: ${MOOV_PASSWORD:-}
     ports:
-      - "8080:8080"
+      - "${BACKEND_PORT_BIND:-8080}:8080"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
       interval: 15s
@@ -109,7 +109,7 @@ services:
       NEXT_PUBLIC_APP_NAME: MynaPay BF
       NEXT_TELEMETRY_DISABLED: 1
     ports:
-      - "3000:3000"
+      - "${FRONTEND_PORT_BIND:-3000}:3000"
 
   # ── PostgreSQL Backup ───────────────────────────────────────────
   pg-backup:
