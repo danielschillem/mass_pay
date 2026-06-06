@@ -68,16 +68,20 @@ type Config struct {
 	MoovUsername string // identifiant Basic Auth (ex: MYNAETOILE)
 	MoovPassword string // mot de passe Basic Auth
 
-	// Email transactionnel — SMTP Hostinger ou fournisseur équivalent
-	MailFromEmail string
-	MailFromName  string
-	SMTPHost      string
-	SMTPPort      int
-	SMTPUsername  string
-	SMTPPassword  string
-	SMTPUseTLS    bool
-	IMAPHost      string
-	IMAPPort      int
+	// Email transactionnel — SMTP ou API HTTPS (brevo/resend/log)
+	MailProvider       string
+	MailFromEmail      string
+	MailFromName       string
+	MailAPIURL         string
+	MailAPIKey         string
+	MailTimeoutSeconds int
+	SMTPHost           string
+	SMTPPort           int
+	SMTPUsername       string
+	SMTPPassword       string
+	SMTPUseTLS         bool
+	IMAPHost           string
+	IMAPPort           int
 
 	WorkerConcurrency int
 	MaxRetries        int
@@ -144,15 +148,19 @@ func Load() *Config {
 		MoovUsername: getEnv("MOOV_USERNAME", ""),
 		MoovPassword: getEnv("MOOV_PASSWORD", ""),
 
-		MailFromEmail: getEnv("MAIL_FROM_EMAIL", ""),
-		MailFromName:  getEnv("MAIL_FROM_NAME", "MynaPay"),
-		SMTPHost:      getEnv("SMTP_HOST", ""),
-		SMTPPort:      getEnvInt("SMTP_PORT", 465),
-		SMTPUsername:  getEnv("SMTP_USERNAME", ""),
-		SMTPPassword:  getEnv("SMTP_PASSWORD", ""),
-		SMTPUseTLS:    getEnvBool("SMTP_USE_TLS", true),
-		IMAPHost:      getEnv("IMAP_HOST", ""),
-		IMAPPort:      getEnvInt("IMAP_PORT", 993),
+		MailProvider:       getEnv("MAIL_PROVIDER", "smtp"),
+		MailFromEmail:      getEnv("MAIL_FROM_EMAIL", ""),
+		MailFromName:       getEnv("MAIL_FROM_NAME", "MynaPay"),
+		MailAPIURL:         getEnv("MAIL_API_URL", ""),
+		MailAPIKey:         getEnv("MAIL_API_KEY", ""),
+		MailTimeoutSeconds: getEnvInt("MAIL_TIMEOUT_SECONDS", 10),
+		SMTPHost:           getEnv("SMTP_HOST", ""),
+		SMTPPort:           getEnvInt("SMTP_PORT", 465),
+		SMTPUsername:       getEnv("SMTP_USERNAME", ""),
+		SMTPPassword:       getEnv("SMTP_PASSWORD", ""),
+		SMTPUseTLS:         getEnvBool("SMTP_USE_TLS", true),
+		IMAPHost:           getEnv("IMAP_HOST", ""),
+		IMAPPort:           getEnvInt("IMAP_PORT", 993),
 
 		WorkerConcurrency: getEnvInt("WORKER_CONCURRENCY", 5),
 		MaxRetries:        getEnvInt("MAX_RETRIES", 3),

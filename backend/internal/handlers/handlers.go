@@ -25,6 +25,7 @@ import (
 
 	"masspay-bf/internal/config"
 	"masspay-bf/internal/crypto"
+	mailservice "masspay-bf/internal/mail"
 	"masspay-bf/internal/middleware"
 	"masspay-bf/internal/models"
 	"masspay-bf/internal/services"
@@ -406,6 +407,75 @@ func (h *AuthHandler) Disable2FA(c *gin.Context) {
 		"totp_enabled": false,
 	})
 	c.JSON(http.StatusOK, gin.H{"message": "2FA désactivé"})
+}
+
+// ── Mail transactionnel ───────────────────────────────────────────
+
+type MailHandler struct {
+	sender mailservice.Sender
+}
+
+func NewMailHandler(sender mailservice.Sender) *MailHandler {
+	return &MailHandler{sender: sender}
+}
+
+func (h *MailHandler) Status(c *gin.Context) {
+	c.JSON(http.StatusOK, gin.H{
+		"provider":   h.sender.Provider(),
+		"configured": h.sender.Configured(),
+	})
+}
+
+func (h *MailHandler) SendTest(c *gin.Context) {
+	var req struct {
+		To      string `json:"to" binding:"omitempty,email"`
+		Subject string `json:"subject"`
+		Text    string `json:"text"`
+		HTML    string `json:"html"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	to := strings.TrimSpace(req.To)
+	if to == "" {
+		user := middleware.GetCurrentUser(c)
+		if user != nil {
+			to = user.Email
+		}
+	}
+	if to == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "destinataire requis"})
+		return
+	}
+
+	subject := strings.TrimSpace(req.Subject)
+	if subject == "" {
+		subject = "Test email MynaPay"
+	}
+	text := strings.TrimSpace(req.Text)
+	html := strings.TrimSpace(req.HTML)
+	if text == "" && html == "" {
+		text = "Le service mail transactionnel MynaPay est opérationnel."
+		html = "<p>Le service mail transactionnel <strong>MynaPay</strong> est opérationnel.</p>"
+	}
+
+	result, err := h.sender.Send(c.Request.Context(), mailservice.Message{
+		To:      []string{to},
+		Subject: subject,
+		Text:    text,
+		HTML:    html,
+	})
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{
+			"provider": h.sender.Provider(),
+			"error":    err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 // ── Super Admin ───────────────────────────────────────────────────

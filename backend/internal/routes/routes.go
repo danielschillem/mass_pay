@@ -9,6 +9,7 @@ import (
 
 	"masspay-bf/internal/config"
 	"masspay-bf/internal/handlers"
+	"masspay-bf/internal/mail"
 	"masspay-bf/internal/middleware"
 	"masspay-bf/internal/models"
 )
@@ -50,6 +51,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 	authH := handlers.NewAuthHandler(db, cfg, rdb)
 	adminH := handlers.NewAdminHandler(db, cfg)
 	tenantH := handlers.NewTenantHandler(db, rdb, cfg)
+	mailH := handlers.NewMailHandler(mail.NewSender(cfg))
 
 	api := r.Group("/api/v1")
 
@@ -83,6 +85,8 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 	admin.Use(middleware.Auth(cfg, rdb), middleware.RequireActiveUser(db), middleware.RequireSuperAdmin())
 	{
 		admin.GET("/stats", adminH.GlobalStatsV2)
+		admin.GET("/mail/status", mailH.Status)
+		admin.POST("/mail/test", mailH.SendTest)
 
 		tenants := admin.Group("/tenants")
 		{
