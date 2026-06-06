@@ -15,6 +15,7 @@ const SA_NAV: NavItem[] = [
   { href:"/admin",          icon:LayoutDashboard, label:"Vue globale"      },
   { href:"/admin/tenants",  icon:Building2,        label:"Tenants"          },
   { href:"/admin/kyb",      icon:Shield,           label:"KYB · Onboarding" },
+  { href:"/admin/admins",   icon:UserCog,          label:"Administrateurs"  },
 ];
 
 const TENANT_NAV: NavItem[] = [
@@ -39,24 +40,25 @@ export function Sidebar({ mode }: { mode: "admin" | "tenant" }) {
   };
 
   return (
-    <div style={{ width:248, background:"var(--surf)", borderRight:"1px solid var(--border)",
+    <div style={{ width:264, background:"rgba(255,255,255,.94)", borderRight:"1px solid var(--border)",
       padding:"18px 14px", display:"flex", flexDirection:"column",
       flexShrink:0, height:"100%", fontFamily:"'DM Sans',sans-serif",
-      boxShadow:"12px 0 30px rgba(15,23,42,.04)", backdropFilter:"blur(16px)" }}>
-      <div style={{ display:"none" }}>
+      boxShadow:"12px 0 34px rgba(17,26,39,.045)", backdropFilter:"blur(18px)" }}>
+      <div style={{ padding:"2px 8px 18px", marginBottom:8,
+        borderBottom:"1px solid var(--border-soft)" }}>
         <LogoMark />
       </div>
       {nav.map(item => {
         const active = pathname === item.href || (item.href !== "/admin" && item.href !== "/dashboard" && pathname.startsWith(item.href));
         return (
           <Link key={item.href} href={item.href} style={{ textDecoration:"none" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:11, padding:"11px 12px",
-              borderRadius:10, marginBottom:4,
-              background: active ? "var(--gold-sub)" : "transparent",
+            <div style={{ display:"flex", alignItems:"center", gap:11, padding:"10px 11px",
+              borderRadius:8, marginBottom:5,
+              background: active ? "linear-gradient(180deg,#fff,var(--gold-sub))" : "transparent",
               border: `1px solid ${active ? "var(--gold-border)" : "transparent"}`,
-              color: active ? "var(--gold)" : "var(--mid)",
+              color: active ? "var(--gold-strong)" : "var(--mid)",
               fontWeight: active ? 700 : 500, fontSize:13, cursor:"pointer",
-              transition:"all .15s", boxShadow: active ? "0 8px 22px rgba(199,131,18,.10)" : "none" }}>
+              transition:"all .16s", boxShadow: active ? "var(--shadow-xs)" : "none" }}>
               <item.icon size={15} style={{ flexShrink:0 }} />
               <span>{item.label}</span>
               {active && <ChevronRight size={12} style={{ marginLeft:"auto" }} />}
@@ -68,7 +70,7 @@ export function Sidebar({ mode }: { mode: "admin" | "tenant" }) {
       <div style={{ marginTop:"auto", paddingTop:14,
         borderTop:"1px solid var(--border-soft)" }}>
         <button onClick={logout} style={{ display:"flex", alignItems:"center", gap:10,
-          padding:"11px 12px", borderRadius:10, color:"var(--sub)", fontWeight:600,
+          padding:"10px 12px", borderRadius:8, color:"var(--sub)", fontWeight:700,
           fontSize:13, cursor:"pointer", background:"var(--elevated)", border:"1px solid var(--border)",
           width:"100%", fontFamily:"'DM Sans',sans-serif" }}>
           <LogOut size={14} /> Déconnexion
@@ -83,11 +85,11 @@ export function LogoMark() {
     <div style={{ display:"flex", alignItems:"center", gap:9,
       fontFamily:"'Sora',sans-serif", fontWeight:800, fontSize:17,
       color:"var(--text)", userSelect:"none" }}>
-      <div style={{ width:32, height:32, background:"linear-gradient(135deg,var(--gold),#EAB308)", borderRadius:10,
-        display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 10px 22px rgba(199,131,18,.22)" }}>
+      <div style={{ width:34, height:34, background:"var(--gold)", borderRadius:8,
+        display:"flex", alignItems:"center", justifyContent:"center", boxShadow:"0 10px 22px rgba(183,121,31,.20)" }}>
         <Layers size={16} color="#fff" />
       </div>
-      MynaPay<span style={{ color:"var(--gold)" }}>BF</span>
+      MynaPay <span style={{ color:"var(--gold)" }}>BF</span>
     </div>
   );
 }

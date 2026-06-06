@@ -127,6 +127,8 @@ export interface LoginRequest {
 
 export interface LoginResponse {
   access_token: string;
+  refresh_token: string;
+  expires_in: number;
   user: {
     id: string;
     email: string;
@@ -196,9 +198,52 @@ export interface DashboardStats {
 export interface GlobalStats {
   total_tenants: number;
   active_tenants: number;
+  suspended_tenants: number;
+  kyb_pending_count: number;
   total_volume_fcfa: number;
   total_commission_fcfa: number;
   total_batches: number;
+  failed_batches: number;
+  processing_batches: number;
+  total_recharges_fcfa: number;
+}
+
+export type KYBDocumentType = "rccm" | "ifu" | "id_card" | "tax_stamp" | "bank_statement" | "other";
+export type KYBDocumentStatus = "pending" | "approved" | "rejected";
+
+export interface KYBDocument {
+  id: string;
+  tenant_id: string;
+  type: KYBDocumentType;
+  original_name: string;
+  file_path: string;
+  mime_type: string;
+  file_size: number;
+  status: KYBDocumentStatus;
+  review_note?: string;
+  uploaded_by: string;
+  reviewed_by?: string;
+  reviewed_at?: string;
+  created_at: string;
+}
+
+export interface KYBComment {
+  id: string;
+  tenant_id: string;
+  comment: string;
+  created_by: string;
+  created_at: string;
+}
+
+export interface KYBHistory {
+  id: string;
+  tenant_id: string;
+  action: string;
+  old_status?: TenantStatus;
+  new_status?: TenantStatus;
+  comment?: string;
+  created_by: string;
+  created_at: string;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────

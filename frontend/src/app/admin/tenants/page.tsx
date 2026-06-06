@@ -50,7 +50,7 @@ function CreateTenantModal({ onClose, onCreated }: { onClose: () => void; onCrea
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
       display:"flex", alignItems:"center", justifyContent:"center" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:16,
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8,
         padding:28, width:520, maxHeight:"90vh", overflowY:"auto" }}>
         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:22 }}>
           <h2 style={{ margin:0, fontSize:17, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
@@ -109,36 +109,62 @@ function CreateTenantModal({ onClose, onCreated }: { onClose: () => void; onCrea
 
 function RechargeModal({ tenant, onClose, onDone }: { tenant: Tenant; onClose: () => void; onDone: () => void }) {
   const [amount, setAmount] = useState("");
-  const [ref, setRef] = useState("");
   const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError]   = useState("");
+  const [confirmedReference, setConfirmedReference] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const n = parseInt(amount, 10);
     if (!n || n <= 0) { setError("Montant invalide"); return; }
-    if (!ref.trim()) { setError("Référence requise"); return; }
     setSaving(true);
     setError("");
     try {
-      await api.admin.rechargeWallet(tenant.id, n, ref.trim());
-      onDone();
+      const res = await api.admin.rechargeWallet(tenant.id, n);
+      setConfirmedReference(res.reference);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Erreur");
-    } finally {
       setSaving(false);
     }
   };
+
+  if (confirmedReference) {
+    return (
+      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
+        display:"flex", alignItems:"center", justifyContent:"center" }}>
+        <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:28, width:400 }}>
+          <div style={{ background:"var(--green-sub)", border:"1px solid rgba(13,201,138,.25)",
+            borderRadius:8, padding:"16px 20px", marginBottom:20, textAlign:"center" as const }}>
+            <div style={{ fontSize:12, color:"var(--sub)", marginBottom:6 }}>Recharge confirmée</div>
+            <div style={{ fontSize:20, fontWeight:800, color:"var(--green)", fontFamily:"'Sora',sans-serif", marginBottom:10 }}>
+              +{parseInt(amount, 10).toLocaleString("fr-FR")} FCFA
+            </div>
+            <div style={{ fontSize:12, color:"var(--sub)" }}>
+              Référence : <code style={{ fontFamily:"monospace", fontWeight:700, color:"var(--text)" }}>{confirmedReference}</code>
+            </div>
+          </div>
+          <button type="button" onClick={onDone}
+            style={{ width:"100%", background:"var(--green)", color:"#fff", border:"none",
+              padding:"10px", borderRadius:9, fontWeight:700, fontSize:14, cursor:"pointer" }}>
+            Fermer
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
       display:"flex", alignItems:"center", justifyContent:"center" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:16, padding:28, width:400 }}>
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:28, width:400 }}>
         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:20 }}>
-          <h2 style={{ margin:0, fontSize:16, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
-            Recharger : {tenant.raison_sociale}
-          </h2>
+          <div>
+            <h2 style={{ margin:"0 0 4px", fontSize:16, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
+              Recharger le wallet
+            </h2>
+            <p style={{ margin:0, fontSize:12, color:"var(--sub)" }}>{tenant.raison_sociale}</p>
+          </div>
           <button type="button" onClick={onClose} aria-label="Fermer"
             style={{ background:"none", border:"none", cursor:"pointer", color:"var(--sub)" }}>
             <X size={18} />
@@ -146,14 +172,10 @@ function RechargeModal({ tenant, onClose, onDone }: { tenant: Tenant; onClose: (
         </div>
         <form onSubmit={handleSubmit}>
           <Row label="Montant (FCFA) *">
-            <Input type="number" min="1" value={amount} onChange={e => setAmount(e.target.value)} required placeholder="ex: 500000" />
+            <Input type="number" min="1" value={amount}
+              onChange={e => setAmount(e.target.value)} required placeholder="ex: 500000" autoFocus />
           </Row>
-          <Row label="Référence virement *">
-            <Input value={ref} onChange={e => setRef(e.target.value)} required placeholder="ex: VIR-2025-0001" />
-          </Row>
-          {error && (
-            <div style={{ color:"var(--red)", fontSize:13, marginBottom:12 }}>{error}</div>
-          )}
+          {error && <div style={{ color:"var(--red)", fontSize:13, marginBottom:12 }}>{error}</div>}
           <div style={{ display:"flex", gap:10, justifyContent:"flex-end", marginTop:8 }}>
             <button type="button" onClick={onClose}
               style={{ background:"var(--elevated)", border:"1px solid var(--border)", color:"var(--mid)",
@@ -164,7 +186,7 @@ function RechargeModal({ tenant, onClose, onDone }: { tenant: Tenant; onClose: (
               style={{ background:"var(--green)", color:"#fff", border:"none",
                 padding:"9px 20px", borderRadius:9, fontWeight:700, fontSize:13,
                 cursor: saving ? "not-allowed" : "pointer", opacity: saving ? .7 : 1 }}>
-              {saving ? "Envoi…" : "Recharger"}
+              {saving ? "Recharge en cours…" : "Confirmer"}
             </button>
           </div>
         </form>
@@ -272,7 +294,7 @@ export default function AdminTenantsPage() {
 
       {actionMsg && (
         <div style={{ position:"fixed", bottom:24, right:24, background:"var(--green)", color:"#fff",
-          padding:"12px 20px", borderRadius:10, fontWeight:700, fontSize:13, zIndex:1000 }}>
+          padding:"12px 20px", borderRadius:8, fontWeight:700, fontSize:13, zIndex:1000 }}>
           {actionMsg}
         </div>
       )}
@@ -288,7 +310,7 @@ export default function AdminTenantsPage() {
         </div>
         <button type="button" onClick={() => setShowCreate(true)}
           style={{ background:"var(--gold)", color:"#fff", border:"none",
-            padding:"10px 18px", borderRadius:10, fontWeight:700, fontSize:13,
+            padding:"10px 18px", borderRadius:8, fontWeight:700, fontSize:13,
             cursor:"pointer", display:"flex", alignItems:"center", gap:6,
             fontFamily:"'Sora',sans-serif" }}>
           <Plus size={15} /> Nouveau tenant
@@ -301,12 +323,12 @@ export default function AdminTenantsPage() {
         <input value={search} onChange={e => setSearch(e.target.value)}
           placeholder="Rechercher par nom ou IFU..."
           style={{ width:"100%", background:"var(--elevated)", border:"1px solid var(--border)",
-            borderRadius:10, padding:"10px 14px 10px 38px", color:"var(--text)",
+            borderRadius:8, padding:"10px 14px 10px 38px", color:"var(--text)",
             fontSize:13, outline:"none", boxSizing:"border-box" as const }} />
       </div>
 
       <div style={{ background:"var(--card)", border:"1px solid var(--border)",
-        borderRadius:14, overflow:"hidden" }}>
+        borderRadius:8, overflow:"hidden" }}>
         {loading ? (
           <div style={{ padding:40, textAlign:"center", color:"var(--sub)" }}>Chargement…</div>
         ) : (
@@ -352,7 +374,7 @@ export default function AdminTenantsPage() {
                       </button>
                       {openMenu === t.id && (
                         <div style={{ position:"absolute", right:0, top:"calc(100% + 4px)",
-                          background:"var(--elevated)", border:"1px solid var(--border)", borderRadius:10,
+                          background:"var(--elevated)", border:"1px solid var(--border)", borderRadius:8,
                           zIndex:99, minWidth:160, overflow:"hidden" }}
                           onMouseLeave={() => setOpenMenu(null)}>
                           {t.status !== "active" && (

@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import type { Route } from "next";
 import { useRouter } from "next/navigation";
-import { TrendingUp, Layers, Users, AlertTriangle, Plus, Send, UserPlus, Upload, Download, ChevronRight, X, Info } from "lucide-react";
+import { TrendingUp, Layers, Users, AlertTriangle, Plus, Send, UserPlus, Upload, Download, ChevronRight, X, Info, Wallet as WalletIcon } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Wallet, Batch, DashboardStats } from "@/lib/types";
 import { StatCard } from "@/components/ui/StatCard";
@@ -21,7 +21,7 @@ function RechargeInfoModal({ onClose }: { onClose: () => void }) {
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
       display:"flex", alignItems:"center", justifyContent:"center" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:16,
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8,
         padding:28, width:420 }}>
         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:18 }}>
           <h2 style={{ margin:0, fontSize:16, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
@@ -33,7 +33,7 @@ function RechargeInfoModal({ onClose }: { onClose: () => void }) {
           </button>
         </div>
         <div style={{ background:"rgba(75,123,255,.1)", border:"1px solid rgba(75,123,255,.25)",
-          borderRadius:10, padding:"14px 16px", display:"flex", gap:12, marginBottom:18 }}>
+          borderRadius:8, padding:"14px 16px", display:"flex", gap:12, marginBottom:18 }}>
           <Info size={18} color="var(--blue)" style={{ flexShrink:0, marginTop:1 }} />
           <p style={{ margin:0, fontSize:13, color:"var(--mid)", lineHeight:1.6 }}>
             La recharge du wallet est effectuée par votre administrateur de plateforme
@@ -91,42 +91,69 @@ export default function TenantDashboard() {
       </div>
 
       {/* Wallet card */}
-      <div style={{ background:"linear-gradient(135deg,#152040 0%,#0C1428 100%)",
-        border:"1px solid var(--border-hi)", borderRadius:16, padding:"26px 28px",
-        marginBottom:22, position:"relative", overflow:"hidden" }}>
-        <div style={{ position:"absolute", right:-30, top:-30, width:150, height:150,
-          borderRadius:"50%", background:"rgba(228,167,48,.1)", filter:"blur(40px)" }} />
-        <div style={{ position:"absolute", left:0, top:0, bottom:0, width:4,
-          background:"linear-gradient(180deg,var(--gold),rgba(228,167,48,0))",
-          borderRadius:"16px 0 0 16px" }} />
-        <div style={{ position:"relative" }}>
-          <div style={{ color:"var(--sub)", fontSize:11, fontWeight:700,
-            textTransform:"uppercase", letterSpacing:".6px", marginBottom:8 }}>
-            Solde disponible
+      <div style={{ background:"linear-gradient(180deg,#fff,var(--elevated))",
+        border:"1px solid var(--border)", borderRadius:8, padding:22,
+        marginBottom:22, boxShadow:"var(--shadow-xs)" }}>
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start",
+          gap:20, marginBottom:18 }}>
+          <div style={{ display:"flex", alignItems:"flex-start", gap:14 }}>
+            <div style={{ width:42, height:42, borderRadius:8, background:"var(--gold-sub)",
+              border:"1px solid var(--gold-border)", display:"flex", alignItems:"center",
+              justifyContent:"center", flexShrink:0 }}>
+              <WalletIcon size={19} color="var(--gold-strong)" />
+            </div>
+            <div>
+              <div style={{ color:"var(--sub)", fontSize:11, fontWeight:800,
+                textTransform:"uppercase", letterSpacing:".6px", marginBottom:6 }}>
+                Solde disponible
+              </div>
+              <div style={{ fontSize:32, fontWeight:800, color:"var(--text)",
+                fontFamily:"'Sora',sans-serif", lineHeight:1.05 }}>
+                {wallet ? fcfa(wallet.available_balance) : "—"}
+              </div>
+            </div>
           </div>
-          <div style={{ fontSize:36, fontWeight:800, color:"var(--text)",
-            fontFamily:"'Sora',sans-serif", marginBottom:4, letterSpacing:"-1px" }}>
-            {wallet ? fcfa(wallet.available_balance) : "—"}
-          </div>
-          <div style={{ color:"var(--sub)", fontSize:13, marginBottom:20 }}>
-            Compte de provision · Wallet plateforme
-          </div>
-          <div style={{ display:"flex", gap:12 }}>
+
+          <div style={{ display:"flex", gap:10, flexWrap:"wrap", justifyContent:"flex-end" }}>
             <button type="button" onClick={() => setShowRecharge(true)}
               style={{ background:"var(--gold)", color:"#fff", border:"none",
-                padding:"10px 20px", borderRadius:9, fontWeight:700, fontSize:13,
+                padding:"10px 16px", borderRadius:8, fontWeight:800, fontSize:13,
                 cursor:"pointer", display:"flex", alignItems:"center", gap:7,
-                fontFamily:"'Sora',sans-serif" }}>
+                fontFamily:"'Sora',sans-serif", boxShadow:"0 10px 22px rgba(183,121,31,.18)" }}>
               <Plus size={15} /> Recharger
             </button>
             <button onClick={() => router.push("/dashboard/batches/new")}
-              style={{ background:"var(--blue-sub)", color:"var(--blue)",
-                border:"1px solid var(--blue-border)", padding:"10px 20px",
-                borderRadius:9, fontWeight:600, fontSize:13, cursor:"pointer",
-                display:"flex", alignItems:"center", gap:7 }}>
+              style={{ background:"var(--card)", color:"var(--blue)",
+                border:"1px solid var(--blue-border)", padding:"10px 16px",
+                borderRadius:8, fontWeight:700, fontSize:13, cursor:"pointer",
+                display:"flex", alignItems:"center", gap:7, boxShadow:"var(--shadow-xs)" }}>
               <Send size={14} /> Nouveau batch
             </button>
           </div>
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:12 }}>
+          {[
+            { label:"Réservé", value: wallet ? fcfa(wallet.reserved_balance) : "—", color:"var(--gold)", bg:"var(--gold-sub)", border:"var(--gold-border)" },
+            { label:"Total débité", value: wallet ? fcfa(wallet.total_debited) : "—", color:"var(--blue)", bg:"var(--blue-sub)", border:"var(--blue-border)" },
+            { label:"Commissions versées", value: wallet ? fcfa(wallet.total_commission) : "—", color:"var(--violet)", bg:"var(--violet-sub)", border:"rgba(109,40,217,.24)" },
+          ].map(item => (
+            <div key={item.label} style={{ background:"var(--card)", border:"1px solid var(--border)",
+              borderRadius:8, padding:"13px 14px" }}>
+              <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
+                <span style={{ width:8, height:8, borderRadius:999, background:item.color,
+                  boxShadow:`0 0 0 3px ${item.bg}` }} />
+                <span style={{ color:"var(--sub)", fontSize:10, fontWeight:800,
+                  textTransform:"uppercase", letterSpacing:".5px" }}>
+                  {item.label}
+                </span>
+              </div>
+              <div style={{ color:item.color, fontSize:16, fontWeight:800,
+                fontFamily:"'Sora',sans-serif" }}>
+                {item.value}
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -140,7 +167,7 @@ export default function TenantDashboard() {
       <div style={{ display:"flex", gap:16 }}>
         {/* Derniers batchs */}
         <div style={{ flex:2, background:"var(--card)", border:"1px solid var(--border)",
-          borderRadius:14, overflow:"hidden" }}>
+          borderRadius:8, overflow:"hidden" }}>
           <div style={{ padding:"15px 22px", borderBottom:"1px solid var(--border)",
             display:"flex", justifyContent:"space-between", alignItems:"center" }}>
             <span style={{ fontWeight:700, fontSize:14, fontFamily:"'Sora',sans-serif" }}>Derniers batchs</span>
@@ -165,16 +192,30 @@ export default function TenantDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {batches.slice(0, 4).map((b, i) => (
-                  <tr key={b.id} style={{ borderBottom: i < 3 ? "1px solid var(--border-soft)" : "none",
-                    cursor:"pointer" }} onClick={() => router.push(`/dashboard/batches`)}>
+                {batches.slice(0, 5).map((b, i) => (
+                  <tr key={b.id} style={{ borderBottom: i < Math.min(batches.length, 5) - 1 ? "1px solid var(--border-soft)" : "none",
+                    cursor:"pointer" }} onClick={() => router.push(`/dashboard/batches/${b.id}`)}>
                     <td style={{ padding:"12px 20px", fontWeight:600, fontSize:13 }}>{b.label}</td>
                     <td style={{ padding:"12px 20px" }}><Badge type={b.type} /></td>
                     <td style={{ padding:"12px 20px", color:"var(--mid)", fontSize:13 }}>{b.item_count}</td>
                     <td style={{ padding:"12px 20px", color:"var(--text)", fontWeight:600, fontSize:13 }}>
                       {shortFcfa(b.total_amount)}
                     </td>
-                    <td style={{ padding:"12px 20px" }}><Badge type={b.status} /></td>
+                    <td style={{ padding:"12px 20px" }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <Badge type={b.status} />
+                        {b.status === "completed" && (
+                          <span style={{ fontSize:10, color:"var(--green)", fontWeight:600 }}>
+                            {b.success_count}/{b.item_count}
+                          </span>
+                        )}
+                        {b.failure_count > 0 && (
+                          <span style={{ fontSize:10, color:"var(--red)", fontWeight:600 }}>
+                            {b.failure_count} éch.
+                          </span>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -184,7 +225,7 @@ export default function TenantDashboard() {
 
         {/* Actions rapides */}
         <div style={{ flex:1, background:"var(--card)", border:"1px solid var(--border)",
-          borderRadius:14, padding:20 }}>
+          borderRadius:8, padding:20 }}>
           <div style={{ fontWeight:700, fontSize:14, marginBottom:16,
             fontFamily:"'Sora',sans-serif" }}>Actions rapides</div>
           {([
@@ -195,7 +236,7 @@ export default function TenantDashboard() {
           ] satisfies QuickAction[]).map(a => (
             <button key={a.label} onClick={() => router.push(a.href)}
               style={{ width:"100%", background:"var(--elevated)", border:"1px solid var(--border)",
-                borderRadius:10, padding:"11px 14px", display:"flex", alignItems:"center",
+                borderRadius:8, padding:"11px 14px", display:"flex", alignItems:"center",
                 gap:11, cursor:"pointer", marginBottom:8, textAlign:"left" }}>
               <div style={{ background:`color-mix(in srgb, ${a.color} 12%, transparent)`, borderRadius:8, padding:7 }}>
                 <a.icon size={14} color={a.color} />

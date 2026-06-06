@@ -43,8 +43,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <TopBar mode="tenant" tenantName={tenantName} userName={userName} userRole={userRole} />
       <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
         <Sidebar mode="tenant" />
-        <main style={{ flex:1, overflow:"auto", padding:"28px 30px 40px" }}>
-          <div style={{ maxWidth:1280, margin:"0 auto" }}>
+        <main style={{ flex:1, overflow:"auto", padding:"26px 28px 38px",
+          background:"linear-gradient(180deg,#F8FAFC 0%, var(--bg) 220px)" }}>
+          <div style={{ maxWidth:1320, margin:"0 auto" }}>
             {children}
           </div>
         </main>

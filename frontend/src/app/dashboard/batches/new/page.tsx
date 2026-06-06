@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Check, Upload, Send, CheckCircle2, AlertTriangle, X, Trash2 } from "lucide-react";
+import { Check, Upload, Send, CheckCircle2, AlertTriangle, X, Trash2, Download, ChevronDown } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Beneficiary, Wallet, BatchType, CreateBatchItemInput } from "@/lib/types";
 import { OpBadge } from "@/components/ui/StatCard";
@@ -114,12 +114,12 @@ export default function NewBatchPage() {
         <div style={{ display:"flex", gap:12 }}>
           <button onClick={() => router.push("/dashboard/batches")}
             style={{ background:"var(--gold)", color:"#fff", border:"none", padding:"10px 22px",
-              borderRadius:10, fontWeight:700, cursor:"pointer", fontFamily:"'Sora',sans-serif" }}>
+              borderRadius:8, fontWeight:700, cursor:"pointer", fontFamily:"'Sora',sans-serif" }}>
             Voir l&apos;historique
           </button>
           <button onClick={() => { setDone(false); setStep(1); setName(""); }}
             style={{ background:"var(--elevated)", border:"1px solid var(--border)", color:"var(--text)",
-              padding:"10px 22px", borderRadius:10, fontWeight:600, cursor:"pointer" }}>
+              padding:"10px 22px", borderRadius:8, fontWeight:600, cursor:"pointer" }}>
             Nouveau batch
           </button>
         </div>
@@ -168,7 +168,7 @@ export default function NewBatchPage() {
             <input value={name} onChange={e => setName(e.target.value)}
               placeholder="Ex : Salaires Juin 2025"
               style={{ width:"100%", background:"var(--elevated)", border:"1px solid var(--border)",
-                borderRadius:10, padding:"12px 16px", color:"var(--text)", fontSize:14,
+                borderRadius:8, padding:"12px 16px", color:"var(--text)", fontSize:14,
                 outline:"none", boxSizing:"border-box" as const }} />
           </div>
           <div style={{ marginBottom:28 }}>
@@ -181,7 +181,7 @@ export default function NewBatchPage() {
                 <button key={v} onClick={() => setType(v)} style={{
                   background: type===v ? "var(--gold-sub)" : "var(--elevated)",
                   border:`1px solid ${type===v ? "var(--gold)" : "var(--border)"}`,
-                  borderRadius:10, padding:"9px 18px",
+                  borderRadius:8, padding:"9px 18px",
                   color: type===v ? "var(--gold)" : "var(--mid)",
                   fontWeight: type===v ? 700 : 400, fontSize:13, cursor:"pointer",
                   textTransform:"capitalize" as const }}>
@@ -193,7 +193,7 @@ export default function NewBatchPage() {
           <button onClick={() => name && setStep(2)} disabled={!name}
             style={{ background: name ? "var(--gold)" : "var(--elevated)",
               color: name ? "#fff" : "var(--sub)", border:"none",
-              padding:"12px 28px", borderRadius:10, fontWeight:700, fontSize:14,
+              padding:"12px 28px", borderRadius:8, fontWeight:700, fontSize:14,
               cursor: name ? "pointer" : "not-allowed", fontFamily:"'Sora',sans-serif" }}>
             Continuer →
           </button>
@@ -203,21 +203,52 @@ export default function NewBatchPage() {
       {/* Step 2 */}
       {step===2 && (
         <div>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14 }}>
-            <span style={{ color:"var(--mid)", fontSize:13 }}>
-              <b style={{ color:"var(--text)" }}>{selected.size}</b> bénéficiaire(s) sélectionné(s)
-            </span>
-            <button type="button" onClick={() => csvRef.current?.click()}
-              style={{ background:"var(--elevated)", border:"1px solid var(--border)",
-                color:"var(--mid)", padding:"7px 14px", borderRadius:8, fontSize:12,
-                cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
-              <Upload size={12} /> Importer CSV
-            </button>
-            <input ref={csvRef} type="file" accept=".csv,.txt" aria-label="Importer un fichier CSV de bénéficiaires" style={{ display:"none" }}
-              onChange={e => { const f = e.target.files?.[0]; if (f) { handleCsvUpload(f); e.target.value = ""; } }} />
+          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, flexWrap:"wrap", gap:10 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+              <span style={{ color:"var(--mid)", fontSize:13 }}>
+                <b style={{ color:"var(--text)" }}>{selected.size}</b> bénéficiaire(s) sélectionné(s)
+              </span>
+              <span style={{ color:"var(--sub)", fontSize:11 }}>
+                · {selBenefs.reduce((a, b) => a + (amounts[b.id] ?? 0), 0).toLocaleString("fr-FR")} F
+              </span>
+            </div>
+            <div style={{ display:"flex", gap:6 }}>
+              <button type="button" onClick={() => {
+                if (selected.size === benefs.length) setSelected(new Set());
+                else setSelected(new Set(benefs.map(b => b.id)));
+              }}
+                style={{ background:"var(--elevated)", border:"1px solid var(--border)",
+                  color:"var(--mid)", padding:"7px 12px", borderRadius:8, fontSize:11,
+                  cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}>
+                <ChevronDown size={11} /> {selected.size === benefs.length ? "Tout désélectionner" : "Tout sélectionner"}
+              </button>
+              <button type="button" onClick={() => {
+                const csv = "full_name;phone_number;amount\nOUEDRAOGO Adama;70123456;50000";
+                const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8;" });
+                const url  = URL.createObjectURL(blob);
+                const a    = document.createElement("a");
+                a.href     = url;
+                a.download = "batch_template.csv";
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+                style={{ background:"var(--elevated)", border:"1px solid var(--border)",
+                  color:"var(--mid)", padding:"7px 12px", borderRadius:8, fontSize:11,
+                  cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}>
+                <Download size={11} /> Modèle
+              </button>
+              <button type="button" onClick={() => csvRef.current?.click()}
+                style={{ background:"var(--elevated)", border:"1px solid var(--border)",
+                  color:"var(--mid)", padding:"7px 12px", borderRadius:8, fontSize:11,
+                  cursor:"pointer", display:"flex", alignItems:"center", gap:4 }}>
+                <Upload size={11} /> CSV
+              </button>
+              <input ref={csvRef} type="file" accept=".csv,.txt" aria-label="Importer un fichier CSV de bénéficiaires" style={{ display:"none" }}
+                onChange={e => { const f = e.target.files?.[0]; if (f) { handleCsvUpload(f); e.target.value = ""; } }} />
+            </div>
           </div>
           <div style={{ background:"var(--card)", border:"1px solid var(--border)",
-            borderRadius:14, overflow:"hidden", marginBottom:20 }}>
+            borderRadius:8, overflow:"hidden", marginBottom:20 }}>
             <table style={{ width:"100%", borderCollapse:"collapse" }}>
               <thead>
                 <tr style={{ borderBottom:"1px solid var(--border)", background:"var(--surf)" }}>
@@ -275,7 +306,7 @@ export default function NewBatchPage() {
                 </button>
               </div>
               <div style={{ background:"var(--card)", border:"1px solid var(--gold-sub-strong)",
-                borderRadius:12, overflow:"hidden" }}>
+                borderRadius:8, overflow:"hidden" }}>
                 <table style={{ width:"100%", borderCollapse:"collapse" }}>
                   <thead>
                     <tr style={{ background:"var(--surf)", borderBottom:"1px solid var(--border)" }}>
@@ -317,9 +348,9 @@ export default function NewBatchPage() {
           <div style={{ display:"flex", gap:10 }}>
             <button onClick={() => setStep(1)} style={{ background:"var(--elevated)",
               border:"1px solid var(--border)", color:"var(--mid)", padding:"11px 20px",
-              borderRadius:10, fontWeight:600, cursor:"pointer", fontSize:13 }}>← Retour</button>
+              borderRadius:8, fontWeight:600, cursor:"pointer", fontSize:13 }}>← Retour</button>
             <button onClick={() => setStep(3)} style={{ background:"var(--gold)", color:"#fff",
-              border:"none", padding:"11px 24px", borderRadius:10, fontWeight:700,
+              border:"none", padding:"11px 24px", borderRadius:8, fontWeight:700,
               cursor:"pointer", fontSize:13, fontFamily:"'Sora',sans-serif" }}>
               Voir le récapitulatif →
             </button>
@@ -332,7 +363,7 @@ export default function NewBatchPage() {
         <div style={{ display:"flex", gap:20, flexWrap:"wrap" as const }}>
           <div style={{ flex:2, minWidth:280 }}>
             <div style={{ background:"var(--card)", border:"1px solid var(--border)",
-              borderRadius:14, overflow:"hidden" }}>
+              borderRadius:8, overflow:"hidden" }}>
               <div style={{ padding:"14px 20px", borderBottom:"1px solid var(--border)",
                 display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                 <span style={{ fontWeight:700, fontSize:14, fontFamily:"'Sora',sans-serif" }}>
@@ -390,7 +421,7 @@ export default function NewBatchPage() {
           </div>
 
           <div style={{ flex:1, minWidth:250 }}>
-            <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:14, padding:22 }}>
+            <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:22 }}>
               <div style={{ fontWeight:800, fontSize:15, marginBottom:20,
                 fontFamily:"'Sora',sans-serif" }}>Récapitulatif financier</div>
 
@@ -416,7 +447,7 @@ export default function NewBatchPage() {
 
               <div style={{ background: sufficient ? "var(--green-sub)" : "var(--red-sub)",
                 border:`1px solid ${sufficient ? "rgba(13,201,138,.25)" : "var(--red-border)"}`,
-                borderRadius:10, padding:"13px 16px", marginBottom:18 }}>
+                borderRadius:8, padding:"13px 16px", marginBottom:18 }}>
                 <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
                   <span style={{ color:"var(--sub)", fontSize:12 }}>Wallet disponible</span>
                   <span style={{ color: sufficient ? "var(--green)" : "var(--red)", fontWeight:700, fontSize:13 }}>
@@ -439,7 +470,7 @@ export default function NewBatchPage() {
                 <button onClick={execute} disabled={!sufficient || loading}
                   style={{ background: sufficient && !loading ? "var(--green)" : "var(--elevated)",
                     color: sufficient && !loading ? "#fff" : "var(--sub)",
-                    border:"none", padding:"13px", borderRadius:10, fontWeight:800,
+                    border:"none", padding:"13px", borderRadius:8, fontWeight:800,
                     fontSize:14, cursor: sufficient && !loading ? "pointer" : "not-allowed",
                     display:"flex", alignItems:"center", justifyContent:"center",
                     gap:8, fontFamily:"'Sora',sans-serif", transition:"all .2s" }}>
@@ -448,7 +479,7 @@ export default function NewBatchPage() {
                 </button>
                 <button onClick={() => setStep(2)} style={{ background:"transparent",
                   border:"1px solid var(--border)", color:"var(--mid)", padding:"10px",
-                  borderRadius:10, fontWeight:600, fontSize:13, cursor:"pointer" }}>
+                  borderRadius:8, fontWeight:600, fontSize:13, cursor:"pointer" }}>
                   ← Modifier les bénéficiaires
                 </button>
               </div>

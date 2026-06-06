@@ -90,16 +90,16 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
   }, [isAdmin]);
 
   return (
-    <div style={{ background:"var(--surf)", borderBottom:"1px solid var(--border)",
-      padding:"0 22px", display:"flex", alignItems:"center",
-      height:62, gap:16, flexShrink:0, position:"sticky", top:0, zIndex:100,
-      backdropFilter:"blur(16px)", boxShadow:"0 10px 28px rgba(15,23,42,.05)" }}>
-      <LogoMark />
+    <div style={{ background:"rgba(255,255,255,.90)", borderBottom:"1px solid var(--border)",
+      padding:"0 24px", display:"flex", alignItems:"center",
+      height:60, gap:14, flexShrink:0, position:"sticky", top:0, zIndex:100,
+      backdropFilter:"blur(18px)", boxShadow:"0 10px 28px rgba(17,26,39,.045)" }}>
+      <div style={{ display:"none" }}><LogoMark /></div>
 
       <div style={{ background: isAdmin ? "var(--gold-sub)" : "var(--blue-sub)",
         border:`1px solid ${isAdmin ? "var(--gold-border)" : "var(--blue-border)"}`,
-        borderRadius:999, padding:"5px 12px", fontSize:11, fontWeight:800,
-        color: isAdmin ? "var(--gold)" : "var(--blue)",
+        borderRadius:999, padding:"5px 11px", fontSize:11, fontWeight:800,
+        color: isAdmin ? "var(--gold-strong)" : "var(--blue)",
         textTransform:"uppercase", letterSpacing:".5px" }}>
         {isAdmin ? "Super Admin" : "Entreprise"}
       </div>
@@ -107,7 +107,7 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
       {!isAdmin && tenantName && (
         <div style={{ display:"flex", alignItems:"center", gap:7,
           background:"var(--card)", border:"1px solid var(--border)",
-          borderRadius:999, padding:"6px 14px", fontSize:13, boxShadow:"var(--shadow-sm)" }}>
+          borderRadius:999, padding:"6px 13px", fontSize:13, boxShadow:"var(--shadow-xs)" }}>
           <Building2 size={12} color="var(--sub)" />
           <span style={{ fontWeight:700, color:"var(--text)", fontSize:12 }}>{tenantName}</span>
         </div>
@@ -120,7 +120,7 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
           <button type="button" onClick={() => setOpen(v => !v)}
             style={{ background: open ? "var(--elevated)" : "var(--card)",
               border:`1px solid ${open ? "var(--border)" : "var(--border)"}`,
-              borderRadius:10, padding:"8px 10px", cursor:"pointer",
+              borderRadius:8, padding:"8px 10px", cursor:"pointer",
               position:"relative", display:"flex", alignItems:"center" }}>
             <Bell size={15} color={open ? "var(--gold)" : "var(--sub)"} />
             {notifs.length > 0 && (
@@ -135,7 +135,7 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
           {open && (
             <div style={{ position:"absolute", right:0, top:"calc(100% + 8px)",
               width:320, background:"var(--card)", border:"1px solid var(--border)",
-              borderRadius:14, zIndex:200, overflow:"hidden",
+              borderRadius:8, zIndex:200, overflow:"hidden",
               boxShadow:"var(--shadow)" }}>
               <div style={{ padding:"12px 16px", borderBottom:"1px solid var(--border)",
                 display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -144,7 +144,7 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
                 </span>
                 {notifs.length > 0 && (
                   <span style={{ background:"var(--red-sub-strong)", color:"var(--red)",
-                    fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:10 }}>
+                    fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:8 }}>
                     {notifs.length}
                   </span>
                 )}
@@ -166,7 +166,7 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
                         textAlign:"left" as const }}
                       onMouseEnter={e => (e.currentTarget.style.background = "var(--blue-hover)")}
                       onMouseLeave={e => (e.currentTarget.style.background = "transparent")}>
-                      <div style={{ width:30, height:30, borderRadius:8,
+                      <div style={{ width:30, height:30, borderRadius:7,
                         background:`color-mix(in srgb, ${n.color} 12%, transparent)`,
                         border:`1px solid color-mix(in srgb, ${n.color} 24%, transparent)`,
                         display:"flex", alignItems:"center", justifyContent:"center",
@@ -203,9 +203,9 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
         <div style={{ display:"flex", alignItems:"center", gap:9 }}>
           <div style={{ width:36, height:36,
             background: isAdmin ? "var(--gold-sub)" : "var(--blue-sub)",
-            borderRadius:"50%", display:"flex", alignItems:"center",
+            borderRadius:8, display:"flex", alignItems:"center",
             justifyContent:"center", fontWeight:800, fontSize:11,
-            color: isAdmin ? "var(--gold)" : "var(--blue)",
+            color: isAdmin ? "var(--gold-strong)" : "var(--blue)",
             border:`1px solid ${isAdmin ? "var(--gold-border)" : "var(--blue-border)"}` }}>
             {initials}
           </div>

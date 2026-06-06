@@ -63,7 +63,7 @@ export default function WalletPage() {
             { label:"Remboursé",    val:wallet.total_refunded,    color:"var(--mid)" },
           ].map(({ label, val, color }) => (
             <div key={label} style={{ background:"var(--card)", border:"1px solid var(--border)",
-              borderRadius:14, padding:"18px 22px", flex:1, minWidth:140 }}>
+              borderRadius:8, padding:"18px 22px", flex:1, minWidth:140 }}>
               <div style={{ color:"var(--sub)", fontSize:10, fontWeight:700,
                 textTransform:"uppercase", letterSpacing:".5px", marginBottom:8 }}>{label}</div>
               <div style={{ color, fontSize:20, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
@@ -75,7 +75,7 @@ export default function WalletPage() {
       )}
 
       {/* Historique */}
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:14, overflow:"hidden" }}>
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
         <div style={{ padding:"14px 20px", borderBottom:"1px solid var(--border)",
           display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <span style={{ fontWeight:700, fontSize:14, fontFamily:"'Sora',sans-serif" }}>
@@ -109,13 +109,15 @@ export default function WalletPage() {
                       </td>
                       <td style={{ padding:"12px 16px" }}>
                         <span style={{ background:`color-mix(in srgb, ${meta.color} 12%, transparent)`, color:meta.color,
-                          fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:20,
+                          fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:8,
                           textTransform:"uppercase" }}>
                           {meta.label}
                         </span>
                       </td>
-                      <td style={{ padding:"12px 16px", color:"var(--mid)", fontSize:11, fontFamily:"monospace" }}>
-                        {tx.reference || "—"}
+                      <td style={{ padding:"12px 16px", fontSize:11, fontFamily:"monospace" }}>
+                        {tx.reference
+                          ? <span style={{ color:"var(--text)", fontWeight:600 }}>{tx.reference}</span>
+                          : <span style={{ color:"var(--sub)" }}>#{tx.id.slice(0, 8)}</span>}
                       </td>
                       <td style={{ padding:"12px 16px", color:"var(--sub)", fontSize:12 }}>
                         {fcfa(tx.balance_before)}

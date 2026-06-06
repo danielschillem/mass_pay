@@ -20,6 +20,7 @@ export default function LoginPage() {
     try {
       const res = await api.login({ email, password });
       auth.setToken(res.access_token);
+      auth.setRefreshToken(res.refresh_token);
       localStorage.setItem("masspay_role", res.user.role);
       localStorage.setItem("masspay_user", JSON.stringify(res.user));
       localStorage.setItem("masspay_tenant_name", res.user.tenant_name ?? "");
@@ -35,21 +36,22 @@ export default function LoginPage() {
 
   return (
     <div style={{ minHeight:"100vh", display:"flex", alignItems:"center",
-      justifyContent:"center", padding:24, fontFamily:"'DM Sans',sans-serif" }}>
+      justifyContent:"center", padding:24, fontFamily:"'DM Sans',sans-serif",
+      background:"linear-gradient(180deg,#F8FAFC 0%, var(--app-bg) 100%)" }}>
       <div style={{ width:"100%", maxWidth:980, display:"grid",
         gridTemplateColumns:"minmax(320px, 420px) minmax(320px, 1fr)",
         gap:28, alignItems:"stretch" }}>
         <section style={{ background:"var(--card)", border:"1px solid var(--border)",
-          borderRadius:20, padding:32, boxShadow:"var(--shadow)" }}>
+          borderRadius:8, padding:32, boxShadow:"var(--shadow)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:36 }}>
-            <div style={{ width:42, height:42, background:"var(--gold)", borderRadius:12,
+            <div style={{ width:42, height:42, background:"var(--gold)", borderRadius:8,
               display:"flex", alignItems:"center", justifyContent:"center",
-              boxShadow:"0 12px 26px rgba(199,131,18,.22)" }}>
+              boxShadow:"0 12px 26px rgba(183,121,31,.20)" }}>
               <Layers size={21} color="#fff" />
             </div>
             <span style={{ fontFamily:"'Sora',sans-serif", fontWeight:800,
               fontSize:22, color:"var(--text)" }}>
-              MynaPay<span style={{ color:"var(--gold)" }}>BF</span>
+              MynaPay <span style={{ color:"var(--gold)" }}>BF</span>
             </span>
           </div>
 
@@ -63,7 +65,7 @@ export default function LoginPage() {
 
           {error && (
             <div style={{ background:"var(--red-sub)", border:"1px solid var(--red-border)",
-              borderRadius:12, padding:"11px 14px", marginBottom:16,
+              borderRadius:8, padding:"11px 14px", marginBottom:16,
               color:"var(--red)", fontSize:13, fontWeight:600 }}>
               {error}
             </div>
@@ -81,7 +83,7 @@ export default function LoginPage() {
               onKeyDown={e => e.key === "Enter" && handleLogin()}
               placeholder="admin@entreprise.bf"
               style={{ width:"100%", background:"var(--elevated)",
-                border:"1px solid var(--border)", borderRadius:12,
+                border:"1px solid var(--border)", borderRadius:8,
                 padding:"12px 14px", color:"var(--text)", fontSize:14,
                 outline:"none", boxSizing:"border-box" }}
             />
@@ -99,7 +101,7 @@ export default function LoginPage() {
               onKeyDown={e => e.key === "Enter" && handleLogin()}
               placeholder="********"
               style={{ width:"100%", background:"var(--elevated)",
-                border:"1px solid var(--border)", borderRadius:12,
+                border:"1px solid var(--border)", borderRadius:8,
                 padding:"12px 42px 12px 14px", color:"var(--text)", fontSize:14,
                 outline:"none", boxSizing:"border-box" }}
             />
@@ -113,16 +115,16 @@ export default function LoginPage() {
           <button type="button" onClick={handleLogin} disabled={disabled}
             style={{ width:"100%", background: disabled ? "var(--elevated)" : "var(--gold)",
               color: disabled ? "var(--sub)" : "#fff", border:"none",
-              padding:"13px", borderRadius:12, fontWeight:800, fontSize:15,
+              padding:"13px", borderRadius:8, fontWeight:800, fontSize:15,
               cursor: disabled ? "not-allowed" : "pointer",
               fontFamily:"'Sora',sans-serif",
-              boxShadow: disabled ? "none" : "0 12px 28px rgba(199,131,18,.22)" }}>
+              boxShadow: disabled ? "none" : "0 12px 28px rgba(183,121,31,.20)" }}>
             {loading ? "Connexion..." : "Se connecter"}
           </button>
         </section>
 
-        <section style={{ border:"1px solid var(--border)", borderRadius:20,
-          background:"linear-gradient(135deg,rgba(255,255,255,.94),rgba(241,245,251,.84))",
+        <section style={{ border:"1px solid var(--border)", borderRadius:8,
+          background:"var(--surf)",
           boxShadow:"var(--shadow)", padding:32, display:"flex",
           flexDirection:"column", justifyContent:"space-between", minHeight:420 }}>
           <div>
@@ -136,7 +138,7 @@ export default function LoginPage() {
             </h2>
             <p style={{ color:"var(--mid)", fontSize:15, lineHeight:1.7,
               margin:0, maxWidth:470 }}>
-              Suivi KYB, provisions wallet, batchs, beneficiaires et validations sont regroupes dans un espace pense pour l'execution quotidienne.
+              Suivi KYB, provisions wallet, batchs, bénéficiaires et validations sont regroupés dans un espace pensé pour l'exécution quotidienne.
             </p>
           </div>
 
@@ -144,7 +146,7 @@ export default function LoginPage() {
             gap:12, marginTop:28 }}>
             {["KYB", "Wallet", "Batchs"].map(label => (
               <div key={label} style={{ background:"var(--card)",
-                border:"1px solid var(--border)", borderRadius:14,
+                border:"1px solid var(--border)", borderRadius:8,
                 padding:"14px 12px", boxShadow:"var(--shadow-sm)" }}>
                 <div style={{ color:"var(--sub)", fontSize:11, fontWeight:800,
                   textTransform:"uppercase", letterSpacing:".5px" }}>
@@ -152,7 +154,7 @@ export default function LoginPage() {
                 </div>
                 <div style={{ color:"var(--text)", fontSize:13,
                   fontWeight:800, marginTop:6 }}>
-                  Operationnel
+                  Opérationnel
                 </div>
               </div>
             ))}

@@ -38,7 +38,8 @@ export function Badge({ type }: { type: BadgeType | string }) {
   const s = MAP[type] ?? { label: type, bg: "var(--elevated)", fg: "var(--mid)" };
   return (
     <span style={{ background: s.bg, color: s.fg, fontSize: 10, fontWeight: 700,
-      padding: "3px 9px", borderRadius: 20, letterSpacing: ".5px",
+      padding: "3px 9px", borderRadius: 999, letterSpacing: ".5px",
+      border: `1px solid color-mix(in srgb, ${s.fg} 24%, transparent)`,
       textTransform: "uppercase", whiteSpace: "nowrap" }}>
       {s.label}
     </span>

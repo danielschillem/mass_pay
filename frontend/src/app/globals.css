@@ -4,50 +4,56 @@
 @tailwind utilities;
 
 :root {
-  --bg: #F6F8FC;
-  --surf: rgba(255,255,255,.86);
+  --bg: #F5F7FA;
+  --app-bg: #EEF2F7;
+  --surf: rgba(255,255,255,.92);
   --card: #FFFFFF;
-  --elevated: #F1F5FB;
-  --border: #E1E7F0;
-  --border-hi: #CBD6E5;
+  --elevated: #F8FAFC;
+  --border: #DDE5EF;
+  --border-hi: #B8C6D8;
   --border-soft: rgba(148,163,184,.28);
-  --text: #111827;
-  --mid: #475569;
-  --sub: #718096;
+  --text: #111A27;
+  --mid: #475467;
+  --sub: #7A8798;
 
-  --gold: #C78312;
-  --gold-sub: rgba(199,131,18,.12);
-  --gold-sub-strong: rgba(199,131,18,.18);
-  --gold-border: rgba(199,131,18,.28);
-  --green: #059669;
-  --green-sub: rgba(5,150,105,.12);
-  --green-border: rgba(5,150,105,.28);
-  --red: #DC2626;
-  --red-sub: rgba(220,38,38,.10);
-  --red-sub-strong: rgba(220,38,38,.16);
-  --red-border: rgba(220,38,38,.26);
-  --blue: #2563EB;
-  --blue-sub: rgba(37,99,235,.11);
-  --blue-border: rgba(37,99,235,.25);
-  --blue-hover: rgba(37,99,235,.07);
-  --violet: #7C3AED;
-  --violet-sub: rgba(124,58,237,.11);
+  --gold: #B7791F;
+  --gold-strong: #925F16;
+  --gold-sub: rgba(183,121,31,.11);
+  --gold-sub-strong: rgba(183,121,31,.18);
+  --gold-border: rgba(183,121,31,.30);
+  --green: #047857;
+  --green-sub: rgba(4,120,87,.11);
+  --green-border: rgba(4,120,87,.26);
+  --red: #D92D20;
+  --red-sub: rgba(217,45,32,.10);
+  --red-sub-strong: rgba(217,45,32,.16);
+  --red-border: rgba(217,45,32,.26);
+  --blue: #1D4ED8;
+  --blue-sub: rgba(29,78,216,.10);
+  --blue-border: rgba(29,78,216,.24);
+  --blue-hover: rgba(29,78,216,.06);
+  --violet: #6D28D9;
+  --violet-sub: rgba(109,40,217,.10);
   --muted-sub: rgba(100,116,139,.12);
-  --shadow: 0 18px 45px rgba(15,23,42,.08);
-  --shadow-sm: 0 8px 24px rgba(15,23,42,.06);
+  --shadow: 0 22px 55px rgba(17,26,39,.10);
+  --shadow-sm: 0 10px 28px rgba(17,26,39,.07);
+  --shadow-xs: 0 2px 8px rgba(17,26,39,.05);
 }
 
 * { box-sizing: border-box; }
 
 body {
   background:
-    radial-gradient(circle at 12% 8%, rgba(37,99,235,.10), transparent 28%),
-    radial-gradient(circle at 88% 0%, rgba(199,131,18,.10), transparent 24%),
-    var(--bg);
+    linear-gradient(180deg, #F8FAFC 0%, var(--app-bg) 100%);
   color: var(--text);
   font-family: 'DM Sans', sans-serif;
   -webkit-font-smoothing: antialiased;
   margin: 0;
+}
+
+::selection {
+  background: var(--gold-sub-strong);
+  color: var(--text);
 }
 
 h1, h2, h3, h4, .font-display {
@@ -55,9 +61,9 @@ h1, h2, h3, h4, .font-display {
 }
 
 /* Scrollbars */
-::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 2px; }
+::-webkit-scrollbar-thumb { background: var(--border-hi); border-radius: 999px; }
 
 /* Remove number input arrows */
 input[type="number"] { -moz-appearance: textfield; }
@@ -68,7 +74,7 @@ input[type="number"]::-webkit-inner-spin-button { -webkit-appearance: none; }
 input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--gold) !important;
-  box-shadow: 0 0 0 4px var(--gold-sub);
+  box-shadow: 0 0 0 3px var(--gold-sub);
 }
 
 button, input, select, textarea {
@@ -76,22 +82,38 @@ button, input, select, textarea {
 }
 
 button {
-  transition: transform .15s ease, box-shadow .15s ease, background .15s ease, border-color .15s ease;
+  transition: transform .16s ease, box-shadow .16s ease, background .16s ease, border-color .16s ease, color .16s ease;
 }
 
 button:not(:disabled):hover {
   transform: translateY(-1px);
 }
 
+table {
+  font-variant-numeric: tabular-nums;
+}
+
+tbody tr {
+  transition: background .16s ease;
+}
+
+tbody tr:hover {
+  background: rgba(29,78,216,.035);
+}
+
+a {
+  color: inherit;
+}
+
 @layer components {
   .card {
-    @apply rounded-xl border;
+    @apply rounded-lg border;
     background: var(--card);
     border-color: var(--border);
     box-shadow: var(--shadow-sm);
   }
   .btn-primary {
-    @apply font-bold rounded-xl transition-all duration-200 cursor-pointer flex items-center gap-2;
+    @apply font-bold rounded-lg transition-all duration-200 cursor-pointer flex items-center gap-2;
     background: var(--gold);
     color: #fff;
     border: none;
@@ -102,13 +124,13 @@ button:not(:disabled):hover {
     cursor: not-allowed;
   }
   .btn-ghost {
-    @apply font-semibold rounded-xl transition-all duration-200 cursor-pointer flex items-center gap-2;
+    @apply font-semibold rounded-lg transition-all duration-200 cursor-pointer flex items-center gap-2;
     background: var(--elevated);
     border: 1px solid var(--border);
     color: var(--mid);
   }
   .input {
-    @apply w-full rounded-xl text-sm;
+    @apply w-full rounded-lg text-sm;
     background: var(--elevated);
     border: 1px solid var(--border);
     color: var(--text);

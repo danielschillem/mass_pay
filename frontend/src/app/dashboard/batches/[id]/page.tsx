@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle, XCircle, Clock, RefreshCw, Play, ShieldCheck, Download } from "lucide-react";
+import { ArrowLeft, CheckCircle, XCircle, Clock, RefreshCw, Play, ShieldCheck, Download, AlertTriangle, Info } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Batch, BatchItem, BatchStatus, ItemStatus } from "@/lib/types";
 import { fcfa } from "@/lib/types";
@@ -77,14 +77,32 @@ export default function BatchDetailPage() {
     finally { setActLoading(false); }
   };
 
+  const [showConfirmExec, setShowConfirmExec] = useState(false);
+
   const doExecute = async () => {
     if (!batch) return;
-    if (!confirm("Confirmer l'exécution du batch ? Le montant sera provisionné sur le wallet.")) return;
     setActLoading(true);
+    setShowConfirmExec(false);
     try {
       const r = await api.tenant.executeBatch(batch.id);
       setBatch(r.batch);
       flash("Batch en cours d'exécution");
+    } catch (e: unknown) { flash((e as Error).message, false); }
+    finally { setActLoading(false); }
+  };
+
+  const doRetryFailed = async () => {
+    if (!batch || !batch.items) return;
+    setActLoading(true);
+    try {
+      for (const item of batch.items) {
+        if (item.status === "failed") {
+          await api.tenant.executeBatch(batch.id);
+          break;
+        }
+      }
+      flash("Tentative de relance des échecs initiée");
+      load();
     } catch (e: unknown) { flash((e as Error).message, false); }
     finally { setActLoading(false); }
   };
@@ -106,8 +124,57 @@ export default function BatchDetailPage() {
         <div style={{ position:"fixed", bottom:24, right:24, zIndex:1000,
           background: msg.ok ? "var(--green)" : "var(--red)",
           color: msg.ok ? "#fff" : "#fff",
-          padding:"12px 20px", borderRadius:10, fontWeight:700, fontSize:13 }}>
+          padding:"12px 20px", borderRadius:8, fontWeight:700, fontSize:13 }}>
           {msg.text}
+        </div>
+      )}
+
+      {/* Confirmation modal for execution */}
+      {showConfirmExec && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
+          display:"flex", alignItems:"center", justifyContent:"center" }}
+          onClick={e => { if (e.target === e.currentTarget) setShowConfirmExec(false); }}>
+          <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:28, width:440 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:16 }}>
+              <AlertTriangle size={20} color="var(--gold)" />
+              <h3 style={{ margin:0, fontSize:16, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
+                Confirmer l&apos;exécution
+              </h3>
+            </div>
+            <p style={{ color:"var(--mid)", fontSize:13, lineHeight:1.6, marginBottom:20 }}>
+              Le montant de <b>{fcfa(batch.provision_amount)}</b> sera provisionné sur votre wallet.
+              Cette action est irréversible.
+            </p>
+            <div style={{ background:"var(--surf)", borderRadius:8, padding:14, marginBottom:20 }}>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+                <span style={{ fontSize:12, color:"var(--sub)" }}>Masse à verser</span>
+                <span style={{ fontSize:12, fontWeight:700 }}>{fcfa(batch.total_amount)}</span>
+              </div>
+              <div style={{ display:"flex", justifyContent:"space-between", marginBottom:6 }}>
+                <span style={{ fontSize:12, color:"var(--sub)" }}>Commission</span>
+                <span style={{ fontSize:12, fontWeight:700, color:"var(--gold)" }}>{fcfa(batch.commission_amount)}</span>
+              </div>
+              <div style={{ borderTop:"1px solid var(--border)", margin:"8px 0", paddingTop:8 }}>
+                <div style={{ display:"flex", justifyContent:"space-between" }}>
+                  <span style={{ fontSize:13, fontWeight:700 }}>Total provision</span>
+                  <span style={{ fontSize:13, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>{fcfa(batch.provision_amount)}</span>
+                </div>
+              </div>
+            </div>
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <button type="button" onClick={() => setShowConfirmExec(false)}
+                style={{ background:"var(--elevated)", border:"1px solid var(--border)",
+                  color:"var(--mid)", padding:"9px 18px", borderRadius:9, cursor:"pointer",
+                  fontSize:13, fontWeight:600 }}>Annuler</button>
+              <button type="button" onClick={doExecute} disabled={actLoading}
+                style={{ background:"var(--green)", color:"#fff", border:"none",
+                  padding:"9px 20px", borderRadius:9, fontWeight:700, fontSize:13,
+                  cursor: actLoading ? "not-allowed" : "pointer",
+                  display:"flex", alignItems:"center", gap:6, opacity: actLoading ? .7 : 1 }}>
+                <Play size={14} /> {actLoading ? "Exécution…" : "Confirmer"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
@@ -121,11 +188,11 @@ export default function BatchDetailPage() {
         <div style={{ flex:1 }}>
           <h1 style={{ margin:0, fontSize:20, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>{batch.label}</h1>
           <p style={{ margin:"3px 0 0", color:"var(--sub)", fontSize:12 }}>
-            Batch · {new Date(batch.created_at).toLocaleDateString("fr-FR", { dateStyle:"long" })}
+            {batch.type} · {new Date(batch.created_at).toLocaleDateString("fr-FR", { dateStyle:"long" })}
           </p>
         </div>
         <span style={{ background:`color-mix(in srgb, ${status.color} 12%, transparent)`, color:status.color,
-          padding:"5px 14px", borderRadius:20, fontSize:11, fontWeight:700, textTransform:"uppercase" }}>
+          padding:"5px 14px", borderRadius:8, fontSize:11, fontWeight:700, textTransform:"uppercase" }}>
           {status.label}
         </span>
         {batch.status === "draft" && (
@@ -138,12 +205,21 @@ export default function BatchDetailPage() {
           </button>
         )}
         {batch.status === "validated" && (
-          <button type="button" onClick={doExecute} disabled={actLoading}
+          <button type="button" onClick={() => setShowConfirmExec(true)} disabled={actLoading}
             style={{ background:"var(--green)", color:"#fff", border:"none",
               padding:"9px 16px", borderRadius:9, cursor: actLoading ? "not-allowed" : "pointer",
               fontWeight:700, fontSize:13, display:"flex", alignItems:"center", gap:6,
               opacity: actLoading ? .7 : 1 }}>
             <Play size={14} /> Exécuter
+          </button>
+        )}
+        {batch.status === "failed" && items.filter(i => i.status === "failed").length > 0 && (
+          <button type="button" onClick={doRetryFailed} disabled={actLoading}
+            style={{ background:"var(--gold)", color:"#fff", border:"none",
+              padding:"9px 16px", borderRadius:9, cursor: actLoading ? "not-allowed" : "pointer",
+              fontWeight:700, fontSize:13, display:"flex", alignItems:"center", gap:6,
+              opacity: actLoading ? .7 : 1 }}>
+            <RefreshCw size={14} /> Relancer les échecs
           </button>
         )}
         {items.length > 0 && (
@@ -164,7 +240,7 @@ export default function BatchDetailPage() {
           { label:"Échoués",       val: batch.failure_count,      color:"var(--red)" },
           { label:"Taux de succès",val: `${successRate}%`,        color: successRate >= 90 ? "var(--green)" : successRate >= 70 ? "var(--gold)" : "var(--red)" },
         ].map(({ label, val, color }) => (
-          <div key={label} style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 18px" }}>
+          <div key={label} style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:"16px 18px" }}>
             <div style={{ color:"var(--sub)", fontSize:10, fontWeight:700, textTransform:"uppercase",
               letterSpacing:".5px", marginBottom:6 }}>{label}</div>
             <div style={{ color, fontSize:22, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>{val}</div>
@@ -179,7 +255,7 @@ export default function BatchDetailPage() {
           { label:"Commissions",     val: batch.commission_amount, color:"var(--gold)" },
           { label:"Provision totale",val: batch.provision_amount,  color:"var(--blue)" },
         ].map(({ label, val, color }) => (
-          <div key={label} style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:12, padding:"16px 18px" }}>
+          <div key={label} style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:"16px 18px" }}>
             <div style={{ color:"var(--sub)", fontSize:10, fontWeight:700, textTransform:"uppercase",
               letterSpacing:".5px", marginBottom:6 }}>{label}</div>
             <div style={{ color, fontSize:18, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>{fcfa(val)}</div>
@@ -188,7 +264,7 @@ export default function BatchDetailPage() {
       </div>
 
       {/* Liste des items */}
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:14, overflow:"hidden" }}>
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
         <div style={{ padding:"14px 20px", borderBottom:"1px solid var(--border)" }}>
           <span style={{ fontWeight:700, fontSize:14, fontFamily:"'Sora',sans-serif" }}>
             Bénéficiaires · {items.length} lignes
@@ -227,7 +303,7 @@ export default function BatchDetailPage() {
                     <td style={{ padding:"11px 16px", fontWeight:700, fontSize:13 }}>{fcfa(item.amount)}</td>
                     <td style={{ padding:"11px 16px" }}>
                       <span style={{ background:`color-mix(in srgb, ${st.color} 12%, transparent)`, color:st.color,
-                        fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:20,
+                        fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:8,
                         display:"inline-flex", alignItems:"center", gap:4 }}>
                         {st.icon} {st.label}
                       </span>

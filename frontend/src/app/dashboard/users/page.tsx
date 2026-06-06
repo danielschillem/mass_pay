@@ -46,7 +46,7 @@ function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreate
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
       display:"flex", alignItems:"center", justifyContent:"center" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:16, padding:28, width:440 }}>
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:28, width:440 }}>
         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:22 }}>
           <h2 style={{ margin:0, fontSize:16, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
             Nouvel utilisateur
@@ -134,7 +134,7 @@ function EditUserModal({ user, onClose, onUpdated }: {
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
       display:"flex", alignItems:"center", justifyContent:"center" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:16, padding:28, width:400 }}>
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:28, width:400 }}>
         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:20 }}>
           <h2 style={{ margin:0, fontSize:16, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
             Modifier : {user.email}
@@ -250,7 +250,7 @@ export default function UsersPage() {
       )}
       {msg && (
         <div style={{ position:"fixed", bottom:24, right:24, background:"var(--green)", color:"#fff",
-          padding:"12px 20px", borderRadius:10, fontWeight:700, fontSize:13, zIndex:1000 }}>
+          padding:"12px 20px", borderRadius:8, fontWeight:700, fontSize:13, zIndex:1000 }}>
           {msg}
         </div>
       )}
@@ -264,14 +264,14 @@ export default function UsersPage() {
         </div>
         <button type="button" onClick={() => setShowCreate(true)}
           style={{ background:"var(--gold)", color:"#fff", border:"none",
-            padding:"10px 18px", borderRadius:10, fontWeight:700, fontSize:13,
+            padding:"10px 18px", borderRadius:8, fontWeight:700, fontSize:13,
             cursor:"pointer", display:"flex", alignItems:"center", gap:6,
             fontFamily:"'Sora',sans-serif" }}>
           <Plus size={15} /> Inviter un utilisateur
         </button>
       </div>
 
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:14, overflow:"hidden" }}>
+      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
         {loading ? <Spinner /> : users.length === 0 ? (
           <div style={{ padding:"40px 20px", textAlign:"center", color:"var(--sub)", fontSize:13 }}>
             Aucun utilisateur · invitez votre équipe
@@ -314,7 +314,7 @@ export default function UsersPage() {
                     <td style={{ padding:"13px 18px", color:"var(--mid)", fontSize:12 }}>{u.email}</td>
                     <td style={{ padding:"13px 18px" }}>
                       <span style={{ background:`color-mix(in srgb, ${rColor} 12%, transparent)`, color:rColor,
-                        fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20,
+                        fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:8,
                         textTransform:"uppercase" }}>
                         {ROLE_LABELS[u.role as UserRole] ?? u.role}
                       </span>
@@ -322,7 +322,7 @@ export default function UsersPage() {
                     <td style={{ padding:"13px 18px" }}>
                       <span style={{ background: u.is_active ? "var(--green-sub)" : "var(--red-sub)",
                         color: u.is_active ? "var(--green)" : "var(--red)",
-                        fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20 }}>
+                        fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:8 }}>
                         {u.is_active ? "Actif" : "Inactif"}
                       </span>
                     </td>
