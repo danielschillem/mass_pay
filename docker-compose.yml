@@ -79,8 +79,8 @@ services:
       ORANGE_MONEY_API_PASSWORD: ${ORANGE_MONEY_API_PASSWORD:-}
       ORANGE_MONEY_PROVIDER: ${ORANGE_MONEY_PROVIDER:-101}
       ORANGE_MONEY_PAYID: ${ORANGE_MONEY_PAYID:-12}
-      ORANGE_MONEY_CERT_PUBLIC: ${ORANGE_MONEY_CERT_PUBLIC:-}
-      ORANGE_MONEY_CERT_PRIVATE: ${ORANGE_MONEY_CERT_PRIVATE:-}
+      ORANGE_MONEY_CERT_PUBLIC: ${ORANGE_MONEY_CERT_PUBLIC_CONTAINER:-/run/secrets/orange/star_orange_bf.pem}
+      ORANGE_MONEY_CERT_PRIVATE: ${ORANGE_MONEY_CERT_PRIVATE_CONTAINER:-/run/secrets/orange/OrangeBFV22026.key}
       MOOV_ENV: ${MOOV_ENV:-test}
       MOOV_TEST_URL: ${MOOV_TEST_URL:-https://uat.moov-money.bf:38443}
       MOOV_PROD_URL: ${MOOV_PROD_URL:-}
@@ -95,6 +95,8 @@ services:
       SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
       IMAP_HOST: ${IMAP_HOST:-}
       IMAP_PORT: ${IMAP_PORT:-993}
+    volumes:
+      - ${ORANGE_MONEY_CERTS_DIR:-./certs/orange}:/run/secrets/orange:ro
     ports:
       - "${BACKEND_PORT_BIND:-8080}:8080"
     healthcheck:
