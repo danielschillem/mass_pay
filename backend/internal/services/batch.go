@@ -225,13 +225,13 @@ func (s *BatchService) Execute(batchID, executedBy uuid.UUID) (*models.Batch, er
 	pipe := s.rdb.Pipeline()
 	remainingCommission := batch.CommissionAmount
 	for i, item := range batch.Items {
-		commissionPerItem := int64(0)
-		if batch.TotalAmount > 0 {
-			commissionPerItem = item.Amount * batch.CommissionAmount / batch.TotalAmount
-		}
-		if i == len(batch.Items)-1 {
-			commissionPerItem = remainingCommission
-		}
+		commissionPerItem := allocateItemCommission(
+			batch.TotalAmount,
+			batch.CommissionAmount,
+			item.Amount,
+			remainingCommission,
+			i == len(batch.Items)-1,
+		)
 		remainingCommission -= commissionPerItem
 
 		job := DisbursementJob{
@@ -255,6 +255,21 @@ func (s *BatchService) Execute(batchID, executedBy uuid.UUID) (*models.Batch, er
 	}
 
 	return &batch, nil
+}
+
+func allocateItemCommission(totalAmount, totalCommission, itemAmount, remainingCommission int64, isLast bool) int64 {
+	if isLast {
+		return remainingCommission
+	}
+	if totalAmount <= 0 || totalCommission <= 0 || itemAmount <= 0 || remainingCommission <= 0 {
+		return 0
+	}
+
+	commission := itemAmount * totalCommission / totalAmount
+	if commission > remainingCommission {
+		return remainingCommission
+	}
+	return commission
 }
 
 // FinishItem met à jour un item après traitement par le worker.
