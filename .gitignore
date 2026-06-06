@@ -22,3 +22,13 @@ coverage/
 tmp/
 temp/
 *.tsbuildinfo
+
+# Local provider docs, certificates and runtime data
+API_OM/
+Fw_ Demande d’intégration API – Société MYNA ETOILE SARL/
+certs/
+uploads/
+backups/
+*.pem
+*.key
+backend/masspay-server-linux

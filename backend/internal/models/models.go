@@ -1,11 +1,14 @@
 package models
 
 import (
+	"crypto/rand"
+	"fmt"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/google/uuid"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
@@ -127,6 +130,34 @@ func (u *User) FullName() string {
 
 func (u *User) CanValidateBatch() bool {
 	return u.Role == RoleTenantAdmin || u.Role == RoleSuperAdmin
+}
+
+// ── RefreshToken ───────────────────────────────────────────────────
+
+type RefreshToken struct {
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID    uuid.UUID  `gorm:"type:uuid;index;not null" json:"user_id"`
+	TokenHash string     `gorm:"not null" json:"-"`
+	ExpiresAt time.Time  `gorm:"not null" json:"expires_at"`
+	RevokedAt *time.Time `gorm:"index" json:"revoked_at,omitempty"`
+	CreatedAt time.Time  `json:"created_at"`
+	UserAgent string     `gorm:"size:500" json:"-"`
+	IPAddress string     `gorm:"size:45" json:"-"`
+
+	User User `gorm:"foreignKey:UserID" json:"-"`
+}
+
+func GenerateRefreshToken() (string, string, error) {
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return "", "", err
+	}
+	token := fmt.Sprintf("%x", tokenBytes)
+	hash, err := bcrypt.GenerateFromPassword([]byte(token), bcrypt.DefaultCost)
+	if err != nil {
+		return "", "", err
+	}
+	return token, string(hash), nil
 }
 
 func (u *User) CanExecuteBatch() bool {
@@ -256,6 +287,71 @@ type BatchItem struct {
 	UpdatedAt     time.Time  `json:"updated_at"`
 
 	Batch Batch `gorm:"foreignKey:BatchID" json:"-"`
+}
+
+// ── KYB Document ──────────────────────────────────────────────────
+
+type KYBDocumentType string
+
+const (
+	KYBDocRCCM       KYBDocumentType = "rccm"
+	KYBDocIFU        KYBDocumentType = "ifu"
+	KYBDocIDCard     KYBDocumentType = "id_card"
+	KYBDocTaxStamp   KYBDocumentType = "tax_stamp"
+	KYBDocBankStatement KYBDocumentType = "bank_statement"
+	KYBDocOther      KYBDocumentType = "other"
+)
+
+type KYBDocumentStatus string
+
+const (
+	KYBDocPending   KYBDocumentStatus = "pending"
+	KYBDocApproved  KYBDocumentStatus = "approved"
+	KYBDocRejected  KYBDocumentStatus = "rejected"
+)
+
+type KYBDocument struct {
+	ID           uuid.UUID         `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	TenantID     uuid.UUID         `gorm:"type:uuid;index;not null" json:"tenant_id"`
+	Type         KYBDocumentType   `gorm:"type:varchar(30);not null" json:"type"`
+	OriginalName string            `gorm:"size:255;not null" json:"original_name"`
+	FilePath     string            `gorm:"size:500;not null" json:"file_path"`
+	MimeType     string            `gorm:"size:100" json:"mime_type"`
+	FileSize     int64             `json:"file_size"`
+	Status       KYBDocumentStatus `gorm:"type:varchar(20);default:'pending'" json:"status"`
+	ReviewNote   string            `gorm:"size:500" json:"review_note,omitempty"`
+	UploadedBy   uuid.UUID         `gorm:"type:uuid" json:"uploaded_by"`
+	ReviewedBy   *uuid.UUID        `gorm:"type:uuid" json:"reviewed_by,omitempty"`
+	ReviewedAt   *time.Time        `json:"reviewed_at,omitempty"`
+	CreatedAt    time.Time         `json:"created_at"`
+	UpdatedAt    time.Time         `json:"updated_at"`
+
+	Tenant Tenant `gorm:"foreignKey:TenantID" json:"-"`
+}
+
+// ── KYB Comment ───────────────────────────────────────────────────
+
+type KYBComment struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	TenantID  uuid.UUID `gorm:"type:uuid;index;not null" json:"tenant_id"`
+	Comment   string    `gorm:"size:1000;not null" json:"comment"`
+	CreatedBy uuid.UUID `gorm:"type:uuid" json:"created_by"`
+	CreatedAt time.Time `json:"created_at"`
+
+	Tenant Tenant `gorm:"foreignKey:TenantID" json:"-"`
+}
+
+// ── KYB History ───────────────────────────────────────────────────
+
+type KYBHistory struct {
+	ID        uuid.UUID    `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	TenantID  uuid.UUID    `gorm:"type:uuid;index;not null" json:"tenant_id"`
+	Action    string       `gorm:"size:50;not null" json:"action"`
+	OldStatus *TenantStatus `gorm:"type:varchar(20)" json:"old_status,omitempty"`
+	NewStatus *TenantStatus `gorm:"type:varchar(20)" json:"new_status,omitempty"`
+	Comment   string       `gorm:"size:500" json:"comment,omitempty"`
+	CreatedBy uuid.UUID    `gorm:"type:uuid" json:"created_by"`
+	CreatedAt time.Time    `json:"created_at"`
 }
 
 // ── Helpers ───────────────────────────────────────────────────────

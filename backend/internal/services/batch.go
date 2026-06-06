@@ -10,8 +10,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
-	"masspay-bf/internal/models"
 	"golang.org/x/net/context"
+	"masspay-bf/internal/models"
 )
 
 const (
@@ -21,14 +21,16 @@ const (
 
 // DisbursementJob représente un virement unitaire à exécuter.
 type DisbursementJob struct {
-	BatchItemID uuid.UUID      `json:"batch_item_id"`
-	TenantID    uuid.UUID      `json:"tenant_id"`
-	BatchID     uuid.UUID      `json:"batch_id"`
-	Phone       string         `json:"phone"`
-	Operator    models.Operator `json:"operator"`
-	Amount      int64          `json:"amount"`
-	Label       string         `json:"label"`
-	Attempt     int            `json:"attempt"`
+	BatchItemID      uuid.UUID       `json:"batch_item_id"`
+	TenantID         uuid.UUID       `json:"tenant_id"`
+	BatchID          uuid.UUID       `json:"batch_id"`
+	OperatorRef      string          `json:"operator_ref,omitempty"`
+	Phone            string          `json:"phone"`
+	Operator         models.Operator `json:"operator"`
+	Amount           int64           `json:"amount"`
+	CommissionAmount int64           `json:"commission_amount"`
+	Label            string          `json:"label"`
+	Attempt          int             `json:"attempt"`
 }
 
 // ── Requêtes ──────────────────────────────────────────────────────
@@ -41,9 +43,9 @@ type BatchItemInput struct {
 }
 
 type CreateBatchRequest struct {
-	Label string              `json:"label" binding:"required,min=3,max=200"`
-	Type  models.BatchType    `json:"type" binding:"required,oneof=salaire prime commission autre"`
-	Items []BatchItemInput    `json:"items" binding:"required,min=1,max=5000"`
+	Label string           `json:"label" binding:"required,min=3,max=200"`
+	Type  models.BatchType `json:"type" binding:"required,oneof=salaire prime commission autre"`
+	Items []BatchItemInput `json:"items" binding:"required,min=1,max=5000"`
 }
 
 // ── Service ───────────────────────────────────────────────────────
@@ -188,7 +190,7 @@ func (s *BatchService) Validate(batchID, validatedBy uuid.UUID) (*models.Batch, 
 }
 
 // Execute bascule un batch en traitement et pousse les jobs dans Redis.
-// La commission est définitivement prélevée ici.
+// La commission est réglée par item traité, en conservant exactement le total batch.
 func (s *BatchService) Execute(batchID, executedBy uuid.UUID) (*models.Batch, error) {
 	var batch models.Batch
 	if err := s.db.Preload("Items").First(&batch, "id = ?", batchID).Error; err != nil {
@@ -209,14 +211,11 @@ func (s *BatchService) Execute(batchID, executedBy uuid.UUID) (*models.Batch, er
 
 	ctx := context.Background()
 
-	// Passer en processing + commit commission
+	// Passer en processing — la commission sera prélevée uniquement par item success
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		batch.Status = models.BatchStatusProcessing
 		batch.ExecutedByID = &executedBy
-		if err := tx.Save(&batch).Error; err != nil {
-			return err
-		}
-		return s.wallet.CommitBatch(tx, batch.TenantID, batch.TotalAmount, batch.CommissionAmount, batch.ID)
+		return tx.Save(&batch).Error
 	})
 	if err != nil {
 		return nil, fmt.Errorf("commit batch: %w", err)
@@ -224,16 +223,27 @@ func (s *BatchService) Execute(batchID, executedBy uuid.UUID) (*models.Batch, er
 
 	// Enqueue chaque item dans Redis — pipeline pour performance
 	pipe := s.rdb.Pipeline()
-	for _, item := range batch.Items {
+	remainingCommission := batch.CommissionAmount
+	for i, item := range batch.Items {
+		commissionPerItem := int64(0)
+		if batch.TotalAmount > 0 {
+			commissionPerItem = item.Amount * batch.CommissionAmount / batch.TotalAmount
+		}
+		if i == len(batch.Items)-1 {
+			commissionPerItem = remainingCommission
+		}
+		remainingCommission -= commissionPerItem
+
 		job := DisbursementJob{
-			BatchItemID: item.ID,
-			TenantID:    batch.TenantID,
-			BatchID:     batch.ID,
-			Phone:       item.PhoneNumber,
-			Operator:    item.Operator,
-			Amount:      item.Amount,
-			Label:       batch.Label,
-			Attempt:     0,
+			BatchItemID:      item.ID,
+			TenantID:         batch.TenantID,
+			BatchID:          batch.ID,
+			Phone:            item.PhoneNumber,
+			Operator:         item.Operator,
+			Amount:           item.Amount,
+			CommissionAmount: commissionPerItem,
+			Label:            batch.Label,
+			Attempt:          0,
 		}
 		data, _ := json.Marshal(job)
 		pipe.LPush(ctx, QueueDisbursement, data)

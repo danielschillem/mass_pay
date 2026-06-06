@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -29,9 +32,12 @@ import (
 // ── Slug helpers ─────────────────────────────────────────────────
 
 var (
-	slugNonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
-	slugTrim     = regexp.MustCompile(`^-+|-+$`)
+	slugNonAlnum   = regexp.MustCompile(`[^a-z0-9]+`)
+	slugTrim       = regexp.MustCompile(`^-+|-+$`)
+	fileNameUnsafe = regexp.MustCompile(`[^a-zA-Z0-9._-]+`)
 )
+
+const maxKYBUploadSize = 10 * 1024 * 1024
 
 // slugify converts a string like "Société ABC & Co." → "societe-abc-co"
 func slugify(s string) string {
@@ -83,6 +89,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.Email = normalizeEmail(req.Email)
 
 	var user models.User
 	if err := h.db.Where("email = ? AND deleted_at IS NULL", req.Email).First(&user).Error; err != nil {
@@ -100,9 +107,29 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := middleware.GenerateAccessToken(h.cfg, &user)
+	accessToken, err := middleware.GenerateAccessToken(h.cfg, &user)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "génération token échouée"})
+		return
+	}
+
+	// Générer le refresh token
+	rawRefresh, hashedRefresh, err := models.GenerateRefreshToken()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "génération refresh token échouée"})
+		return
+	}
+
+	refreshExpiry := time.Now().Add(time.Duration(h.cfg.RefreshExpiryDays) * 24 * time.Hour)
+	refreshToken := models.RefreshToken{
+		UserID:    user.ID,
+		TokenHash: hashedRefresh,
+		ExpiresAt: refreshExpiry,
+		UserAgent: c.GetHeader("User-Agent"),
+		IPAddress: c.ClientIP(),
+	}
+	if err := h.db.Create(&refreshToken).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "sauvegarde refresh token échouée"})
 		return
 	}
 
@@ -119,7 +146,9 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"access_token": token,
+		"access_token":  accessToken,
+		"refresh_token": rawRefresh,
+		"expires_in":    h.cfg.JWTExpiryHours * 3600,
 		"user": gin.H{
 			"id":          user.ID,
 			"email":       user.Email,
@@ -131,11 +160,125 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	})
 }
 
+type refreshRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+func (h *AuthHandler) RefreshToken(c *gin.Context) {
+	var req refreshRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "refresh_token requis"})
+		return
+	}
+
+	// Chercher le refresh token exact parmi les tokens non révoqués et non expirés.
+	var candidates []models.RefreshToken
+	if err := h.db.Where("revoked_at IS NULL AND expires_at > ?", time.Now()).
+		Order("created_at DESC").Find(&candidates).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token invalide ou expiré"})
+		return
+	}
+
+	var stored *models.RefreshToken
+	for i := range candidates {
+		if bcrypt.CompareHashAndPassword([]byte(candidates[i].TokenHash), []byte(req.RefreshToken)) == nil {
+			stored = &candidates[i]
+			break
+		}
+	}
+	if stored == nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "refresh token invalide"})
+		return
+	}
+
+	// Révoquer l'ancien refresh token (rotation)
+	now := time.Now()
+	h.db.Model(stored).Update("revoked_at", now)
+
+	// Charger l'utilisateur
+	var user models.User
+	if err := h.db.Where("id = ? AND deleted_at IS NULL", stored.UserID).First(&user).Error; err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "utilisateur introuvable"})
+		return
+	}
+
+	if !user.IsActive {
+		c.JSON(http.StatusForbidden, gin.H{"error": "compte désactivé"})
+		return
+	}
+
+	// Générer nouveau token pair
+	accessToken, err := middleware.GenerateAccessToken(h.cfg, &user)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "génération token échouée"})
+		return
+	}
+
+	rawRefresh, hashedRefresh, err := models.GenerateRefreshToken()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "génération refresh token échouée"})
+		return
+	}
+
+	refreshExpiry := time.Now().Add(time.Duration(h.cfg.RefreshExpiryDays) * 24 * time.Hour)
+	newRefresh := models.RefreshToken{
+		UserID:    user.ID,
+		TokenHash: hashedRefresh,
+		ExpiresAt: refreshExpiry,
+		UserAgent: c.GetHeader("User-Agent"),
+		IPAddress: c.ClientIP(),
+	}
+	h.db.Create(&newRefresh)
+
+	c.JSON(http.StatusOK, gin.H{
+		"access_token":  accessToken,
+		"refresh_token": rawRefresh,
+		"expires_in":    h.cfg.JWTExpiryHours * 3600,
+	})
+}
+
+type logoutRequest struct {
+	RefreshToken string `json:"refresh_token" binding:"required"`
+}
+
+func (h *AuthHandler) Logout(c *gin.Context) {
+	var req logoutRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "refresh_token requis"})
+		return
+	}
+
+	// Révoquer tous les refresh tokens de l'utilisateur (invalide toutes les sessions)
+	userID := middleware.GetCallerID(c)
+	now := time.Now()
+	result := h.db.Model(&models.RefreshToken{}).
+		Where("user_id = ? AND revoked_at IS NULL", userID).
+		Update("revoked_at", now)
+
+	if result.RowsAffected == 0 {
+		// Chercher le token spécifique si aucun n'a été matché par user_id
+		var tokens []models.RefreshToken
+		h.db.Where("revoked_at IS NULL AND expires_at > ?", time.Now()).Find(&tokens)
+		for _, t := range tokens {
+			if bcrypt.CompareHashAndPassword([]byte(t.TokenHash), []byte(req.RefreshToken)) == nil {
+				h.db.Model(&t).Update("revoked_at", now)
+				break
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "déconnexion réussie"})
+}
+
 func (h *AuthHandler) Me(c *gin.Context) {
 	userID := middleware.GetCallerID(c)
 	var user models.User
-	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
+	if err := h.db.Where("id = ? AND deleted_at IS NULL", userID).First(&user).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "utilisateur introuvable"})
+		return
+	}
+	if !user.IsActive {
+		c.JSON(http.StatusForbidden, gin.H{"error": "compte désactivé"})
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"user": user})
@@ -167,7 +310,7 @@ func (h *AdminHandler) ListTenants(c *gin.Context) {
 	}
 	q.Count(&total)
 	q.Preload("Wallet").Order("created_at DESC").
-		Offset((page-1)*size).Limit(size).Find(&tenants)
+		Offset((page - 1) * size).Limit(size).Find(&tenants)
 
 	c.JSON(http.StatusOK, gin.H{
 		"data":  tenants,
@@ -196,6 +339,13 @@ func (h *AdminHandler) CreateTenant(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.RaisonSociale = strings.TrimSpace(req.RaisonSociale)
+	req.RCCM = strings.TrimSpace(req.RCCM)
+	req.IFU = strings.TrimSpace(req.IFU)
+	req.Secteur = strings.TrimSpace(req.Secteur)
+	req.AdminEmail = normalizeEmail(req.AdminEmail)
+	req.AdminFirstName = strings.TrimSpace(req.AdminFirstName)
+	req.AdminLastName = strings.TrimSpace(req.AdminLastName)
 
 	callerID := middleware.GetCallerID(c)
 	commRate := h.cfg.DefaultCommissionRate
@@ -212,15 +362,15 @@ func (h *AdminHandler) CreateTenant(c *gin.Context) {
 	var tenant models.Tenant
 	err = h.db.Transaction(func(tx *gorm.DB) error {
 		tenant = models.Tenant{
-			Slug:            uniqueSlug(tx, req.RaisonSociale),
-			RaisonSociale:   req.RaisonSociale,
-			RCCM:            req.RCCM,
-			IFU:             req.IFU,
-			Secteur:         req.Secteur,
-			Status:          models.TenantStatusKYBPending,
-			CommissionRate:  commRate,
+			Slug:                uniqueSlug(tx, req.RaisonSociale),
+			RaisonSociale:       req.RaisonSociale,
+			RCCM:                req.RCCM,
+			IFU:                 req.IFU,
+			Secteur:             req.Secteur,
+			Status:              models.TenantStatusKYBPending,
+			CommissionRate:      commRate,
 			ValidationThreshold: h.cfg.ValidationThreshold,
-			CreatedByID:     &callerID,
+			CreatedByID:         &callerID,
 		}
 		if err := tx.Create(&tenant).Error; err != nil {
 			return err
@@ -275,18 +425,26 @@ func (h *AdminHandler) ActivateTenant(c *gin.Context) {
 
 // SuspendTenant suspend un tenant.
 func (h *AdminHandler) SuspendTenant(c *gin.Context) {
-	tenantID, _ := uuid.Parse(c.Param("tenantId"))
-	h.db.Model(&models.Tenant{}).Where("id = ?", tenantID).
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+	result := h.db.Model(&models.Tenant{}).Where("id = ?", tenantID).
 		Update("status", models.TenantStatusSuspended)
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "tenant introuvable"})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "tenant suspendu"})
 }
 
 type walletRechargeRequest struct {
-	Amount    int64  `json:"amount" binding:"required,min=1"`
-	Reference string `json:"reference" binding:"required"`
+	Amount int64 `json:"amount" binding:"required,min=1"`
 }
 
 // RechargeWallet crédite le wallet d'un tenant (opération admin).
+// La référence est auto-générée au format YYYY-MYNA-XXXX.
 func (h *AdminHandler) RechargeWallet(c *gin.Context) {
 	tenantID, err := uuid.Parse(c.Param("tenantId"))
 	if err != nil {
@@ -300,22 +458,48 @@ func (h *AdminHandler) RechargeWallet(c *gin.Context) {
 	}
 	callerID := middleware.GetCallerID(c)
 	ws := services.NewWalletService(h.db)
-	wallet, err := ws.Recharge(tenantID, req.Amount, req.Reference, callerID)
+	wallet, reference, err := ws.Recharge(tenantID, req.Amount, callerID)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "wallet rechargé", "wallet": wallet})
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "wallet rechargé",
+		"reference": reference,
+		"wallet":    wallet,
+	})
+}
+
+// ListTenantWalletTransactions retourne l'historique wallet d'un tenant (vue admin).
+func (h *AdminHandler) ListTenantWalletTransactions(c *gin.Context) {
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	size, _ := strconv.Atoi(c.DefaultQuery("size", "20"))
+	if size > 100 {
+		size = 100
+	}
+
+	var txs []models.WalletTransaction
+	var total int64
+	q := h.db.Model(&models.WalletTransaction{}).Where("tenant_id = ?", tenantID)
+	q.Count(&total)
+	q.Order("created_at DESC").Offset((page - 1) * size).Limit(size).Find(&txs)
+
+	c.JSON(http.StatusOK, gin.H{"data": txs, "total": total, "page": page, "size": size})
 }
 
 // GlobalStats retourne les métriques globales plateforme.
 func (h *AdminHandler) GlobalStats(c *gin.Context) {
 	var stats struct {
-		TotalTenants  int64   `json:"total_tenants"`
-		ActiveTenants int64   `json:"active_tenants"`
-		TotalVolume   int64   `json:"total_volume_fcfa"`
+		TotalTenants    int64 `json:"total_tenants"`
+		ActiveTenants   int64 `json:"active_tenants"`
+		TotalVolume     int64 `json:"total_volume_fcfa"`
 		TotalCommission int64 `json:"total_commission_fcfa"`
-		TotalBatches  int64   `json:"total_batches"`
+		TotalBatches    int64 `json:"total_batches"`
 	}
 
 	h.db.Model(&models.Tenant{}).Count(&stats.TotalTenants)
@@ -487,7 +671,7 @@ func (h *TenantHandler) ListBeneficiaries(c *gin.Context) {
 		q = q.Where("full_name ILIKE ? OR phone_number LIKE ?", "%"+search+"%", "%"+search+"%")
 	}
 	q.Count(&total)
-	q.Order("full_name ASC").Offset((page-1)*size).Limit(size).Find(&benefs)
+	q.Order("full_name ASC").Offset((page - 1) * size).Limit(size).Find(&benefs)
 
 	c.JSON(http.StatusOK, gin.H{"data": benefs, "total": total})
 }
@@ -570,10 +754,18 @@ func (h *TenantHandler) UpdateBeneficiary(c *gin.Context) {
 	}
 
 	updates := map[string]interface{}{}
-	if req.FullName != nil      { updates["full_name"] = *req.FullName }
-	if req.GroupName != nil     { updates["group_name"] = *req.GroupName }
-	if req.DefaultAmount != nil { updates["default_amount"] = *req.DefaultAmount }
-	if req.ExternalRef != nil   { updates["external_ref"] = *req.ExternalRef }
+	if req.FullName != nil {
+		updates["full_name"] = *req.FullName
+	}
+	if req.GroupName != nil {
+		updates["group_name"] = *req.GroupName
+	}
+	if req.DefaultAmount != nil {
+		updates["default_amount"] = *req.DefaultAmount
+	}
+	if req.ExternalRef != nil {
+		updates["external_ref"] = *req.ExternalRef
+	}
 	if len(updates) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "aucun champ à mettre à jour"})
 		return
@@ -604,7 +796,7 @@ func (h *TenantHandler) ListWalletTransactions(c *gin.Context) {
 
 	q := h.db.Model(&models.WalletTransaction{}).Where("tenant_id = ?", tenant.ID)
 	q.Count(&total)
-	q.Order("created_at DESC").Offset((page-1)*size).Limit(size).Find(&txs)
+	q.Order("created_at DESC").Offset((page - 1) * size).Limit(size).Find(&txs)
 
 	c.JSON(http.StatusOK, gin.H{"data": txs, "total": total, "page": page, "size": size})
 }
@@ -638,6 +830,13 @@ func (h *TenantHandler) CreateUser(c *gin.Context) {
 	var req createUserTenantRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.Email = normalizeEmail(req.Email)
+	req.FirstName = strings.TrimSpace(req.FirstName)
+	req.LastName = strings.TrimSpace(req.LastName)
+	if !isTenantUserRole(req.Role) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "rôle tenant invalide"})
 		return
 	}
 
@@ -686,10 +885,22 @@ func (h *TenantHandler) UpdateUser(c *gin.Context) {
 	}
 
 	updates := map[string]interface{}{}
-	if req.FirstName != nil { updates["first_name"] = *req.FirstName }
-	if req.LastName != nil  { updates["last_name"] = *req.LastName }
-	if req.Role != nil      { updates["role"] = *req.Role }
-	if req.IsActive != nil  { updates["is_active"] = *req.IsActive }
+	if req.FirstName != nil {
+		updates["first_name"] = strings.TrimSpace(*req.FirstName)
+	}
+	if req.LastName != nil {
+		updates["last_name"] = strings.TrimSpace(*req.LastName)
+	}
+	if req.Role != nil {
+		if !isTenantUserRole(*req.Role) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "rôle tenant invalide"})
+			return
+		}
+		updates["role"] = *req.Role
+	}
+	if req.IsActive != nil {
+		updates["is_active"] = *req.IsActive
+	}
 	if len(updates) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "aucun champ à mettre à jour"})
 		return
@@ -710,7 +921,11 @@ func (h *TenantHandler) UpdateUser(c *gin.Context) {
 
 func (h *TenantHandler) DeleteUser(c *gin.Context) {
 	tenant := middleware.GetCurrentTenant(c)
-	userID, _ := uuid.Parse(c.Param("userId"))
+	userID, err := uuid.Parse(c.Param("userId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id invalide"})
+		return
+	}
 
 	result := h.db.Where("id = ? AND tenant_id = ?", userID, tenant.ID).Delete(&models.User{})
 	if result.RowsAffected == 0 {
@@ -770,13 +985,27 @@ func (h *AdminHandler) UpdateTenant(c *gin.Context) {
 	}
 
 	updates := map[string]interface{}{}
-	if req.RaisonSociale != nil       { updates["raison_sociale"] = *req.RaisonSociale }
-	if req.RCCM != nil                { updates["rccm"] = *req.RCCM }
-	if req.IFU != nil                 { updates["ifu"] = *req.IFU }
-	if req.Secteur != nil             { updates["secteur"] = *req.Secteur }
-	if req.CommissionRate != nil      { updates["commission_rate"] = *req.CommissionRate }
-	if req.ValidationThreshold != nil { updates["validation_threshold"] = *req.ValidationThreshold }
-	if req.BatchAmountLimit != nil    { updates["batch_amount_limit"] = *req.BatchAmountLimit }
+	if req.RaisonSociale != nil {
+		updates["raison_sociale"] = *req.RaisonSociale
+	}
+	if req.RCCM != nil {
+		updates["rccm"] = *req.RCCM
+	}
+	if req.IFU != nil {
+		updates["ifu"] = *req.IFU
+	}
+	if req.Secteur != nil {
+		updates["secteur"] = *req.Secteur
+	}
+	if req.CommissionRate != nil {
+		updates["commission_rate"] = *req.CommissionRate
+	}
+	if req.ValidationThreshold != nil {
+		updates["validation_threshold"] = *req.ValidationThreshold
+	}
+	if req.BatchAmountLimit != nil {
+		updates["batch_amount_limit"] = *req.BatchAmountLimit
+	}
 	if len(updates) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "aucun champ à mettre à jour"})
 		return
@@ -793,7 +1022,559 @@ func (h *AdminHandler) UpdateTenant(c *gin.Context) {
 	c.JSON(http.StatusOK, tenant)
 }
 
+// ── KYB Handlers ──────────────────────────────────────────────────
+
+// ListKYBDocuments retourne tous les documents KYB d'un tenant.
+func (h *AdminHandler) ListKYBDocuments(c *gin.Context) {
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+
+	var docs []models.KYBDocument
+	h.db.Where("tenant_id = ?", tenantID).Order("created_at DESC").Find(&docs)
+	c.JSON(http.StatusOK, gin.H{"data": docs})
+}
+
+// UploadKYBDocument enregistre un document KYB.
+func (h *AdminHandler) UploadKYBDocument(c *gin.Context) {
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+	callerID := middleware.GetCallerID(c)
+
+	var req struct {
+		Type     string `json:"type" binding:"required"`
+		FileName string `json:"file_name" binding:"required"`
+		MimeType string `json:"mime_type"`
+		FileSize int64  `json:"file_size"`
+		FileData string `json:"file_data" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	fileBytes, err := base64.StdEncoding.DecodeString(req.FileData)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "fichier KYB invalide"})
+		return
+	}
+	if len(fileBytes) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "fichier KYB vide"})
+		return
+	}
+	if len(fileBytes) > maxKYBUploadSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "fichier KYB trop volumineux"})
+		return
+	}
+
+	docID := uuid.New()
+	originalName := filepath.Base(strings.TrimSpace(req.FileName))
+	ext := strings.ToLower(filepath.Ext(originalName))
+	nameWithoutExt := strings.TrimSuffix(originalName, filepath.Ext(originalName))
+	safeName := strings.Trim(fileNameUnsafe.ReplaceAllString(nameWithoutExt, "_"), "._-")
+	if safeName == "" {
+		safeName = "document"
+	}
+	storedName := fmt.Sprintf("%s-%s%s", docID.String(), safeName, ext)
+	dir := filepath.Join("uploads", "kyb", tenantID.String())
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "création dossier KYB échouée"})
+		return
+	}
+	storedPath := filepath.Join(dir, storedName)
+	if err := os.WriteFile(storedPath, fileBytes, 0o600); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture fichier KYB échouée"})
+		return
+	}
+
+	doc := models.KYBDocument{
+		ID:           docID,
+		TenantID:     tenantID,
+		Type:         models.KYBDocumentType(req.Type),
+		OriginalName: originalName,
+		MimeType:     req.MimeType,
+		FileSize:     int64(len(fileBytes)),
+		FilePath:     filepath.ToSlash(storedPath),
+		Status:       models.KYBDocPending,
+		UploadedBy:   callerID,
+	}
+	if err := h.db.Create(&doc).Error; err != nil {
+		_ = os.Remove(storedPath)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.db.Create(&models.KYBHistory{
+		TenantID:  tenantID,
+		Action:    "document_uploaded",
+		Comment:   fmt.Sprintf("Document %s téléversé : %s", req.Type, req.FileName),
+		CreatedBy: callerID,
+	})
+
+	c.JSON(http.StatusCreated, doc)
+}
+
+// ReviewKYBDocument approuve ou rejette un document KYB.
+func (h *AdminHandler) ReviewKYBDocument(c *gin.Context) {
+	docID, err := uuid.Parse(c.Param("docId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "doc_id invalide"})
+		return
+	}
+	callerID := middleware.GetCallerID(c)
+
+	var req struct {
+		Status     string `json:"status" binding:"required,oneof=approved rejected"`
+		ReviewNote string `json:"review_note"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var doc models.KYBDocument
+	if err := h.db.First(&doc, "id = ?", docID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "document introuvable"})
+		return
+	}
+
+	now := time.Now()
+	h.db.Model(&doc).Updates(map[string]interface{}{
+		"status":      models.KYBDocumentStatus(req.Status),
+		"review_note": req.ReviewNote,
+		"reviewed_by": callerID,
+		"reviewed_at": now,
+	})
+
+	action := "document_approved"
+	if req.Status == "rejected" {
+		action = "document_rejected"
+	}
+	h.db.Create(&models.KYBHistory{
+		TenantID:  doc.TenantID,
+		Action:    action,
+		Comment:   req.ReviewNote,
+		CreatedBy: callerID,
+	})
+
+	c.JSON(http.StatusOK, doc)
+}
+
+// ListKYBComments retourne les commentaires KYB d'un tenant.
+func (h *AdminHandler) ListKYBComments(c *gin.Context) {
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+
+	var comments []models.KYBComment
+	h.db.Where("tenant_id = ?", tenantID).Order("created_at ASC").Find(&comments)
+	c.JSON(http.StatusOK, gin.H{"data": comments})
+}
+
+// AddKYBComment ajoute un commentaire KYB.
+func (h *AdminHandler) AddKYBComment(c *gin.Context) {
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+	callerID := middleware.GetCallerID(c)
+
+	var req struct {
+		Comment string `json:"comment" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	comment := models.KYBComment{
+		TenantID:  tenantID,
+		Comment:   req.Comment,
+		CreatedBy: callerID,
+	}
+	if err := h.db.Create(&comment).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, comment)
+}
+
+// GetKYBHistory retourne l'historique KYB d'un tenant.
+func (h *AdminHandler) GetKYBHistory(c *gin.Context) {
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+
+	var history []models.KYBHistory
+	h.db.Where("tenant_id = ?", tenantID).Order("created_at DESC").Find(&history)
+	c.JSON(http.StatusOK, gin.H{"data": history})
+}
+
+// RejectKYB rejette un dossier KYB complet et le remet en prospect.
+func (h *AdminHandler) RejectKYB(c *gin.Context) {
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+	callerID := middleware.GetCallerID(c)
+
+	var req struct {
+		Reason string `json:"reason" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	var tenant models.Tenant
+	if err := h.db.First(&tenant, "id = ?", tenantID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "tenant introuvable"})
+		return
+	}
+
+	oldStatus := tenant.Status
+	newStatus := models.TenantStatusProspect
+
+	h.db.Model(&tenant).Update("status", newStatus)
+
+	h.db.Create(&models.KYBHistory{
+		TenantID:  tenantID,
+		Action:    "kyb_rejected",
+		OldStatus: &oldStatus,
+		NewStatus: &newStatus,
+		Comment:   req.Reason,
+		CreatedBy: callerID,
+	})
+
+	c.JSON(http.StatusOK, gin.H{"message": "KYB rejeté, tenant repassé en prospect"})
+}
+
+// ── Admin : gestion des utilisateurs d'un tenant ─────────────────
+
+func (h *AdminHandler) ListTenantUsers(c *gin.Context) {
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+	var users []models.User
+	var total int64
+	h.db.Model(&models.User{}).Where("tenant_id = ? AND deleted_at IS NULL", tenantID).Count(&total)
+	h.db.Where("tenant_id = ? AND deleted_at IS NULL", tenantID).Order("created_at ASC").Find(&users)
+	c.JSON(http.StatusOK, gin.H{"data": users, "total": total})
+}
+
+func (h *AdminHandler) CreateTenantUser(c *gin.Context) {
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+	var req createUserTenantRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.Email = normalizeEmail(req.Email)
+	req.FirstName = strings.TrimSpace(req.FirstName)
+	req.LastName = strings.TrimSpace(req.LastName)
+	if !isTenantUserRole(req.Role) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "rôle tenant invalide"})
+		return
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "hash password"})
+		return
+	}
+	user := models.User{
+		TenantID:     &tenantID,
+		Email:        req.Email,
+		PasswordHash: string(hash),
+		FirstName:    req.FirstName,
+		LastName:     req.LastName,
+		Role:         req.Role,
+	}
+	if err := h.db.Create(&user).Error; err != nil {
+		if isDuplicate(err) {
+			c.JSON(http.StatusConflict, gin.H{"error": "email déjà utilisé"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusCreated, user)
+}
+
+func (h *AdminHandler) UpdateTenantUser(c *gin.Context) {
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+	userID, err := uuid.Parse(c.Param("userId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id invalide"})
+		return
+	}
+	var req struct {
+		FirstName *string          `json:"first_name"`
+		LastName  *string          `json:"last_name"`
+		Role      *models.UserRole `json:"role"`
+		IsActive  *bool            `json:"is_active"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	updates := map[string]interface{}{}
+	if req.FirstName != nil {
+		updates["first_name"] = strings.TrimSpace(*req.FirstName)
+	}
+	if req.LastName != nil {
+		updates["last_name"] = strings.TrimSpace(*req.LastName)
+	}
+	if req.Role != nil {
+		if !isTenantUserRole(*req.Role) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "rôle tenant invalide"})
+			return
+		}
+		updates["role"] = *req.Role
+	}
+	if req.IsActive != nil {
+		updates["is_active"] = *req.IsActive
+	}
+	if len(updates) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "aucun champ à mettre à jour"})
+		return
+	}
+	result := h.db.Model(&models.User{}).
+		Where("id = ? AND tenant_id = ?", userID, tenantID).
+		Updates(updates)
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "utilisateur introuvable"})
+		return
+	}
+	var user models.User
+	h.db.First(&user, "id = ?", userID)
+	c.JSON(http.StatusOK, user)
+}
+
+func (h *AdminHandler) DeleteTenantUser(c *gin.Context) {
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+	userID, err := uuid.Parse(c.Param("userId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id invalide"})
+		return
+	}
+	result := h.db.Where("id = ? AND tenant_id = ?", userID, tenantID).Delete(&models.User{})
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "utilisateur introuvable"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "utilisateur supprimé"})
+}
+
+// ── Super Admin User Management ────────────────────────────────────
+
+// ListAdminUsers liste les super admins.
+func (h *AdminHandler) ListAdminUsers(c *gin.Context) {
+	var users []models.User
+	var total int64
+
+	h.db.Model(&models.User{}).Where("role = ? AND deleted_at IS NULL", models.RoleSuperAdmin).Count(&total)
+	h.db.Where("role = ? AND deleted_at IS NULL", models.RoleSuperAdmin).
+		Order("created_at DESC").Find(&users)
+
+	c.JSON(http.StatusOK, gin.H{"data": users, "total": total})
+}
+
+type createAdminUserRequest struct {
+	Email     string `json:"email" binding:"required,email"`
+	Password  string `json:"password" binding:"required,min=8"`
+	FirstName string `json:"first_name" binding:"required"`
+	LastName  string `json:"last_name" binding:"required"`
+}
+
+// CreateAdminUser crée un super admin.
+func (h *AdminHandler) CreateAdminUser(c *gin.Context) {
+	var req createAdminUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.Email = normalizeEmail(req.Email)
+	req.FirstName = strings.TrimSpace(req.FirstName)
+	req.LastName = strings.TrimSpace(req.LastName)
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "hash password"})
+		return
+	}
+
+	user := models.User{
+		Email:        req.Email,
+		PasswordHash: string(hash),
+		FirstName:    req.FirstName,
+		LastName:     req.LastName,
+		Role:         models.RoleSuperAdmin,
+	}
+	if err := h.db.Create(&user).Error; err != nil {
+		if isDuplicate(err) {
+			c.JSON(http.StatusConflict, gin.H{"error": "email déjà utilisé"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, user)
+}
+
+// UpdateAdminUser modifie un super admin.
+func (h *AdminHandler) UpdateAdminUser(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("userId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id invalide"})
+		return
+	}
+
+	var req struct {
+		FirstName *string `json:"first_name"`
+		LastName  *string `json:"last_name"`
+		IsActive  *bool   `json:"is_active"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	updates := map[string]interface{}{}
+	if req.FirstName != nil {
+		updates["first_name"] = strings.TrimSpace(*req.FirstName)
+	}
+	if req.LastName != nil {
+		updates["last_name"] = strings.TrimSpace(*req.LastName)
+	}
+	if req.IsActive != nil {
+		if !*req.IsActive && !hasAnotherActiveSuperAdmin(h.db, userID) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "impossible de désactiver le dernier super admin actif"})
+			return
+		}
+		updates["is_active"] = *req.IsActive
+	}
+	if len(updates) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "aucun champ à mettre à jour"})
+		return
+	}
+
+	result := h.db.Model(&models.User{}).
+		Where("id = ? AND role = ?", userID, models.RoleSuperAdmin).
+		Updates(updates)
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "admin introuvable"})
+		return
+	}
+
+	var user models.User
+	h.db.First(&user, "id = ?", userID)
+	c.JSON(http.StatusOK, user)
+}
+
+// DeleteAdminUser supprime (soft-delete) un super admin.
+func (h *AdminHandler) DeleteAdminUser(c *gin.Context) {
+	userID, err := uuid.Parse(c.Param("userId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "user_id invalide"})
+		return
+	}
+
+	// Empêcher l'auto-suppression
+	callerID := middleware.GetCallerID(c)
+	if callerID == userID {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "impossible de se supprimer soi-même"})
+		return
+	}
+	if !hasAnotherActiveSuperAdmin(h.db, userID) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "impossible de supprimer le dernier super admin actif"})
+		return
+	}
+
+	result := h.db.Where("id = ? AND role = ?", userID, models.RoleSuperAdmin).Delete(&models.User{})
+	if result.RowsAffected == 0 {
+		c.JSON(http.StatusNotFound, gin.H{"error": "admin introuvable"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "admin supprimé"})
+}
+
+// ── Enhanced GlobalStats ──────────────────────────────────────────
+
+func (h *AdminHandler) GlobalStatsV2(c *gin.Context) {
+	var stats struct {
+		TotalTenants      int64 `json:"total_tenants"`
+		ActiveTenants     int64 `json:"active_tenants"`
+		SuspendedTenants  int64 `json:"suspended_tenants"`
+		KYBPendingCount   int64 `json:"kyb_pending_count"`
+		TotalVolume       int64 `json:"total_volume_fcfa"`
+		TotalCommission   int64 `json:"total_commission_fcfa"`
+		TotalBatches      int64 `json:"total_batches"`
+		FailedBatches     int64 `json:"failed_batches"`
+		ProcessingBatches int64 `json:"processing_batches"`
+		TotalRecharges    int64 `json:"total_recharges_fcfa"`
+	}
+
+	h.db.Model(&models.Tenant{}).Count(&stats.TotalTenants)
+	h.db.Model(&models.Tenant{}).Where("status = ?", models.TenantStatusActive).Count(&stats.ActiveTenants)
+	h.db.Model(&models.Tenant{}).Where("status = ?", models.TenantStatusSuspended).Count(&stats.SuspendedTenants)
+	h.db.Model(&models.Tenant{}).Where("status = ?", models.TenantStatusKYBPending).Count(&stats.KYBPendingCount)
+	h.db.Model(&models.Wallet{}).Select("COALESCE(SUM(total_debited), 0)").Scan(&stats.TotalVolume)
+	h.db.Model(&models.Wallet{}).Select("COALESCE(SUM(total_commission), 0)").Scan(&stats.TotalCommission)
+	h.db.Model(&models.Batch{}).Where("status = ?", models.BatchStatusCompleted).Count(&stats.TotalBatches)
+	h.db.Model(&models.Batch{}).Where("status = ?", models.BatchStatusFailed).Count(&stats.FailedBatches)
+	h.db.Model(&models.Batch{}).Where("status = ?", models.BatchStatusProcessing).Count(&stats.ProcessingBatches)
+	h.db.Model(&models.WalletTransaction{}).Where("type = ?", models.WalletTxRecharge).
+		Select("COALESCE(SUM(amount), 0)").Scan(&stats.TotalRecharges)
+
+	c.JSON(http.StatusOK, stats)
+}
+
 // ── Helper ────────────────────────────────────────────────────────
+
+func normalizeEmail(email string) string {
+	return strings.ToLower(strings.TrimSpace(email))
+}
+
+func isTenantUserRole(role models.UserRole) bool {
+	return role == models.RoleTenantAdmin ||
+		role == models.RoleTenantManager ||
+		role == models.RoleTenantAuditor
+}
+
+func hasAnotherActiveSuperAdmin(db *gorm.DB, excludeID uuid.UUID) bool {
+	var count int64
+	db.Model(&models.User{}).
+		Where("role = ? AND is_active = true AND id <> ? AND deleted_at IS NULL", models.RoleSuperAdmin, excludeID).
+		Count(&count)
+	return count > 0
+}
 
 func isDuplicate(err error) bool {
 	if err == nil {

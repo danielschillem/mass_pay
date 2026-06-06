@@ -13,11 +13,14 @@ import (
 	"masspay-bf/internal/models"
 )
 
-func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
+func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers.WorkerStatusFunc) *gin.Engine {
 	gin.SetMode(cfg.GinMode)
 
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
+
+	// Rate limiting global
+	r.Use(middleware.RateLimit(rdb, cfg))
 
 	// CORS minimal — adapter selon les besoins prod
 	r.Use(func(c *gin.Context) {
@@ -31,13 +34,12 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 		c.Next()
 	})
 
-	// Healthcheck
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "MynaPay BF"})
-	})
+	// Monitoring — accessible sans auth
+	monitoring := handlers.NewMonitoringHandler(db, rdb, cfg, workerFn)
+	r.GET("/health", monitoring.Health)
 
-	authH   := handlers.NewAuthHandler(db, cfg)
-	adminH  := handlers.NewAdminHandler(db, cfg)
+	authH := handlers.NewAuthHandler(db, cfg)
+	adminH := handlers.NewAdminHandler(db, cfg)
 	tenantH := handlers.NewTenantHandler(db, rdb, cfg)
 
 	api := r.Group("/api/v1")
@@ -46,14 +48,16 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 	auth := api.Group("/auth")
 	{
 		auth.POST("/login", authH.Login)
+		auth.POST("/refresh", authH.RefreshToken)
+		auth.POST("/logout", middleware.Auth(cfg), authH.Logout)
 		auth.GET("/me", middleware.Auth(cfg), authH.Me)
 	}
 
 	// ── Super Admin ───────────────────────────────────────────────
 	admin := api.Group("/admin")
-	admin.Use(middleware.Auth(cfg), middleware.RequireSuperAdmin())
+	admin.Use(middleware.Auth(cfg), middleware.RequireActiveUser(db), middleware.RequireSuperAdmin())
 	{
-		admin.GET("/stats", adminH.GlobalStats)
+		admin.GET("/stats", adminH.GlobalStatsV2)
 
 		tenants := admin.Group("/tenants")
 		{
@@ -64,6 +68,36 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 			tenants.PATCH("/:tenantId/activate", adminH.ActivateTenant)
 			tenants.PATCH("/:tenantId/suspend", adminH.SuspendTenant)
 			tenants.POST("/:tenantId/wallet/recharge", adminH.RechargeWallet)
+			tenants.GET("/:tenantId/wallet/transactions", adminH.ListTenantWalletTransactions)
+
+			// Utilisateurs d'un tenant (vue admin)
+			tenantUsers := tenants.Group("/:tenantId/users")
+			{
+				tenantUsers.GET("", adminH.ListTenantUsers)
+				tenantUsers.POST("", adminH.CreateTenantUser)
+				tenantUsers.PATCH("/:userId", adminH.UpdateTenantUser)
+				tenantUsers.DELETE("/:userId", adminH.DeleteTenantUser)
+			}
+
+			kyb := tenants.Group("/:tenantId/kyb")
+			{
+				kyb.GET("/documents", adminH.ListKYBDocuments)
+				kyb.POST("/documents", adminH.UploadKYBDocument)
+				kyb.PATCH("/documents/:docId/review", adminH.ReviewKYBDocument)
+				kyb.GET("/comments", adminH.ListKYBComments)
+				kyb.POST("/comments", adminH.AddKYBComment)
+				kyb.GET("/history", adminH.GetKYBHistory)
+				kyb.POST("/reject", adminH.RejectKYB)
+			}
+		}
+
+		// Gestion des super admins
+		admins := admin.Group("/admins")
+		{
+			admins.GET("", adminH.ListAdminUsers)
+			admins.POST("", adminH.CreateAdminUser)
+			admins.PATCH("/:userId", adminH.UpdateAdminUser)
+			admins.DELETE("/:userId", adminH.DeleteAdminUser)
 		}
 	}
 
@@ -73,6 +107,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 	tenant := api.Group("/tenant")
 	tenant.Use(
 		middleware.Auth(cfg),
+		middleware.RequireActiveUser(db),
 		middleware.RequireRole(
 			models.RoleSuperAdmin,
 			models.RoleTenantAdmin,
@@ -90,16 +125,16 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 		{
 			batches.GET("", tenantH.ListBatches)
 			batches.POST("",
-				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin, models.RoleTenantManager),
+				middleware.RequirePermission(middleware.PermBatchCreate),
 				tenantH.CreateBatch,
 			)
 			batches.GET("/:batchId", tenantH.GetBatch)
 			batches.POST("/:batchId/validate",
-				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin),
+				middleware.RequirePermission(middleware.PermBatchValidate),
 				tenantH.ValidateBatch,
 			)
 			batches.POST("/:batchId/execute",
-				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin),
+				middleware.RequirePermission(middleware.PermBatchExecute),
 				tenantH.ExecuteBatch,
 			)
 		}
@@ -109,15 +144,15 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 		{
 			benef.GET("", tenantH.ListBeneficiaries)
 			benef.POST("",
-				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin, models.RoleTenantManager),
+				middleware.RequirePermission(middleware.PermBeneficiaryWrite),
 				tenantH.CreateBeneficiary,
 			)
 			benef.PATCH("/:beneficiaryId",
-				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin, models.RoleTenantManager),
+				middleware.RequirePermission(middleware.PermBeneficiaryWrite),
 				tenantH.UpdateBeneficiary,
 			)
 			benef.DELETE("/:beneficiaryId",
-				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin),
+				middleware.RequirePermission(middleware.PermBeneficiaryDelete),
 				tenantH.DeleteBeneficiary,
 			)
 		}
@@ -130,15 +165,15 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config) *gin.Engine {
 		{
 			users.GET("", tenantH.ListUsers)
 			users.POST("",
-				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin),
+				middleware.RequirePermission(middleware.PermTenantUserWrite),
 				tenantH.CreateUser,
 			)
 			users.PATCH("/:userId",
-				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin),
+				middleware.RequirePermission(middleware.PermTenantUserWrite),
 				tenantH.UpdateUser,
 			)
 			users.DELETE("/:userId",
-				middleware.RequireRole(models.RoleSuperAdmin, models.RoleTenantAdmin),
+				middleware.RequirePermission(middleware.PermTenantUserDelete),
 				tenantH.DeleteUser,
 			)
 		}

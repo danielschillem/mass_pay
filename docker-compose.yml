@@ -1,5 +1,3 @@
-version: "3.9"
-
 services:
 
   # ── PostgreSQL ──────────────────────────────────────────────────
@@ -13,6 +11,7 @@ services:
       POSTGRES_PASSWORD: ${DB_PASSWORD:-masspay_secret}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups:ro
     ports:
       - "5432:5432"
     healthcheck:
@@ -50,23 +49,43 @@ services:
       redis:
         condition: service_healthy
     environment:
+      ENV: ${ENV:-dev}
       PORT: 8080
-      GIN_MODE: release
+      GIN_MODE: ${GIN_MODE:-release}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
       DATABASE_URL: postgres://masspay:${DB_PASSWORD:-masspay_secret}@postgres:5432/masspay_bf?sslmode=disable
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET est requis}
-      JWT_EXPIRY_HOURS: 24
+      JWT_SECRET_PREVIOUS: ${JWT_SECRET_PREVIOUS:-}
+      JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-24}
+      REFRESH_EXPIRY_DAYS: ${REFRESH_EXPIRY_DAYS:-30}
+      SEED_SUPER_ADMIN: ${SEED_SUPER_ADMIN:-true}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-admin@mynapay.bf}
+      SUPER_ADMIN_PASSWORD: ${SUPER_ADMIN_PASSWORD:-MynaPay@2026!}
+      SUPER_ADMIN_FIRST_NAME: ${SUPER_ADMIN_FIRST_NAME:-Super}
+      SUPER_ADMIN_LAST_NAME: ${SUPER_ADMIN_LAST_NAME:-Admin}
+      RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+      RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-60}
       DEFAULT_COMMISSION_RATE: 0.015
       VALIDATION_THRESHOLD: 500000
       WORKER_CONCURRENCY: 5
       MAX_RETRIES: 3
       RETRY_DELAY_SECONDS: 30
-      ORANGE_BASE_URL: ${ORANGE_BASE_URL:-}
-      ORANGE_API_KEY: ${ORANGE_API_KEY:-}
-      ORANGE_ACCOUNT_ID: ${ORANGE_ACCOUNT_ID:-}
-      MOOV_BASE_URL: ${MOOV_BASE_URL:-}
-      MOOV_API_KEY: ${MOOV_API_KEY:-}
-      MOOV_ACCOUNT_ID: ${MOOV_ACCOUNT_ID:-}
+      ORANGE_MONEY_ENV: ${ORANGE_MONEY_ENV:-test}
+      ORANGE_MONEY_TEST_URL: ${ORANGE_MONEY_TEST_URL:-https://testom.orange.bf/}
+      ORANGE_MONEY_PROD_URL: ${ORANGE_MONEY_PROD_URL:-https://apiom.orange.bf/}
+      ORANGE_MONEY_MERCHANT_MSISDN: ${ORANGE_MONEY_MERCHANT_MSISDN:-}
+      ORANGE_MONEY_API_USERNAME: ${ORANGE_MONEY_API_USERNAME:-}
+      ORANGE_MONEY_API_PASSWORD: ${ORANGE_MONEY_API_PASSWORD:-}
+      ORANGE_MONEY_PROVIDER: ${ORANGE_MONEY_PROVIDER:-101}
+      ORANGE_MONEY_PAYID: ${ORANGE_MONEY_PAYID:-12}
+      ORANGE_MONEY_CERT_PUBLIC: ${ORANGE_MONEY_CERT_PUBLIC:-}
+      ORANGE_MONEY_CERT_PRIVATE: ${ORANGE_MONEY_CERT_PRIVATE:-}
+      MOOV_ENV: ${MOOV_ENV:-test}
+      MOOV_TEST_URL: ${MOOV_TEST_URL:-https://uat.moov-money.bf:38443}
+      MOOV_PROD_URL: ${MOOV_PROD_URL:-}
+      MOOV_USERNAME: ${MOOV_USERNAME:-}
+      MOOV_PASSWORD: ${MOOV_PASSWORD:-}
     ports:
       - "8080:8080"
     healthcheck:
@@ -86,10 +105,45 @@ services:
       backend:
         condition: service_healthy
     environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8080/api/v1
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080/api/v1}
       NEXT_PUBLIC_APP_NAME: MynaPay BF
+      NEXT_TELEMETRY_DISABLED: 1
     ports:
       - "3000:3000"
+
+  # ── PostgreSQL Backup ───────────────────────────────────────────
+  pg-backup:
+    image: alpine:3.20
+    container_name: masspay_backup
+    profiles:
+      - backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGPORT: 5432
+      BACKUP_PG_DATABASE: masspay_bf
+      BACKUP_PG_USER: masspay
+      BACKUP_PG_PASSWORD: ${DB_PASSWORD:-masspay_secret}
+      BACKUP_S3_BUCKET: ${BACKUP_S3_BUCKET:-}
+      BACKUP_S3_REGION: ${BACKUP_S3_REGION:-eu-west-3}
+      BACKUP_RETENTION_DAYS: 7
+    volumes:
+      - ./scripts/backup-pg.sh:/usr/local/bin/backup-pg:ro
+      - ./backups:/backups
+      - /etc/localtime:/etc/localtime:ro
+    command: >
+      sh -c "
+        apk add --no-cache postgresql-client aws-cli &&
+        while true; do
+          echo '[backup] Démarrage backup à \$$(date)' &&
+          backup-pg &&
+          echo '[backup] Prochain backup dans 24h' &&
+          sleep 86400
+        done
+      "
 
 volumes:
   postgres_data:

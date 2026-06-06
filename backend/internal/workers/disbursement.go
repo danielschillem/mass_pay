@@ -4,31 +4,44 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
 
 	"masspay-bf/internal/config"
 	"masspay-bf/internal/gateway"
+	"masspay-bf/internal/handlers"
 	"masspay-bf/internal/services"
 )
 
 // Start lance le worker pool et le scheduler de retry.
-// Bloquant : appeler dans une goroutine.
-func Start(db *gorm.DB, rdb *redis.Client, cfg *config.Config) {
+// Retourne une fonction de statut pour le monitoring.
+func Start(db *gorm.DB, rdb *redis.Client, cfg *config.Config, log *logrus.Logger) handlers.WorkerStatusFunc {
 	ws := services.NewWalletService(db)
 	bs := services.NewBatchService(db, rdb)
 
+	var (
+		processed atomic.Int64
+		failed    atomic.Int64
+		success   atomic.Int64
+	)
+
 	w := &worker{
-		db:  db,
-		rdb: rdb,
-		cfg: cfg,
-		ws:  ws,
-		bs:  bs,
+		db:        db,
+		rdb:       rdb,
+		cfg:       cfg,
+		log:       log,
+		ws:        ws,
+		bs:        bs,
+		processed: &processed,
+		failed:    &failed,
+		success:   &success,
+		running:   true,
 	}
 
 	var wg sync.WaitGroup
@@ -38,7 +51,7 @@ func Start(db *gorm.DB, rdb *redis.Client, cfg *config.Config) {
 		wg.Add(1)
 		go func(id int) {
 			defer wg.Done()
-			log.Printf("[worker %d] démarré", id)
+			log.WithField("worker_id", id).Info("worker démarré")
 			w.run(id)
 		}(i)
 	}
@@ -50,65 +63,115 @@ func Start(db *gorm.DB, rdb *redis.Client, cfg *config.Config) {
 		w.retryScheduler()
 	}()
 
-	wg.Wait()
+	// Retourne une fonction de statut pour le monitoring
+	return func() map[string]interface{} {
+		return map[string]interface{}{
+			"status":      "running",
+			"processed":   processed.Load(),
+			"success":     success.Load(),
+			"failed":      failed.Load(),
+			"concurrency": cfg.WorkerConcurrency,
+			"queues": map[string]interface{}{
+				"disbursement": rdb.LLen(context.Background(), services.QueueDisbursement).Val(),
+				"retry":        rdb.ZCard(context.Background(), services.QueueRetry).Val(),
+			},
+		}
+	}
 }
 
 type worker struct {
-	db  *gorm.DB
-	rdb *redis.Client
-	cfg *config.Config
-	ws  *services.WalletService
-	bs  *services.BatchService
+	db        *gorm.DB
+	rdb       *redis.Client
+	cfg       *config.Config
+	log       *logrus.Logger
+	ws        *services.WalletService
+	bs        *services.BatchService
+	processed *atomic.Int64
+	failed    *atomic.Int64
+	success   *atomic.Int64
+	running   bool
 }
 
-// run est la boucle principale d'un worker — blocking pop Redis.
 func (w *worker) run(id int) {
 	ctx := context.Background()
 	for {
-		// BRPOP : bloquant, timeout 5s pour permettre shutdown propre
 		result, err := w.rdb.BRPop(ctx, 5*time.Second, services.QueueDisbursement).Result()
 		if err == redis.Nil {
-			continue // timeout, reboucler
+			continue
 		}
 		if err != nil {
-			log.Printf("[worker %d] BRPOP error: %v — pause 2s", id, err)
+			w.log.WithField("worker_id", id).Errorf("BRPOP error: %v", err)
 			time.Sleep(2 * time.Second)
 			continue
 		}
 
 		var job services.DisbursementJob
 		if err := json.Unmarshal([]byte(result[1]), &job); err != nil {
-			log.Printf("[worker %d] decode error: %v", id, err)
+			w.log.WithField("worker_id", id).Errorf("decode error: %v", err)
 			continue
 		}
 
 		if err := w.process(ctx, job); err != nil {
-			log.Printf("[worker %d] process error item %s: %v", id, job.BatchItemID, err)
+			w.log.WithFields(logrus.Fields{
+				"worker_id": id,
+				"item_id":   job.BatchItemID,
+			}).Errorf("process error: %v", err)
 		}
 	}
 }
 
-// process exécute un virement unitaire.
 func (w *worker) process(ctx context.Context, job services.DisbursementJob) error {
-	log.Printf("[worker] processing item %s — %s — %d FCFA — attempt %d",
-		job.BatchItemID, job.Phone, job.Amount, job.Attempt+1)
+	w.log.WithFields(logrus.Fields{
+		"item_id": job.BatchItemID,
+		"phone":   job.Phone,
+		"amount":  job.Amount,
+		"attempt": job.Attempt + 1,
+	}).Info("processing item")
 
 	gw := gateway.New(job.Operator, w.cfg)
 
-	resp, err := gw.Send(ctx, gateway.SendRequest{
-		Phone:     job.Phone,
-		Amount:    job.Amount,
-		Reference: job.BatchItemID.String(),
-		Label:     job.Label,
-	})
-
-	if err == nil && (resp.Status == "success" || resp.Status == "pending") {
-		// Succès — mettre à jour l'item
-		log.Printf("[worker] SUCCESS item %s — ref opérateur: %s", job.BatchItemID, resp.OperatorRef)
-		return w.bs.FinishItem(job.BatchItemID, true, resp.OperatorRef, "")
+	var resp *gateway.SendResponse
+	var err error
+	if job.OperatorRef != "" {
+		resp, err = gw.CheckStatus(ctx, job.OperatorRef)
+	} else {
+		resp, err = gw.Send(ctx, gateway.SendRequest{
+			Phone:     job.Phone,
+			Amount:    job.Amount,
+			Reference: job.BatchItemID.String(),
+			Label:     job.Label,
+		})
 	}
 
-	// Échec — décider retry ou abandon
+	if err == nil && resp != nil {
+		if resp.OperatorRef != "" {
+			job.OperatorRef = resp.OperatorRef
+		}
+
+		switch resp.Status {
+		case "success":
+			w.processed.Add(1)
+			w.success.Add(1)
+			w.log.WithFields(logrus.Fields{
+				"item_id": job.BatchItemID,
+				"ref":     job.OperatorRef,
+			}).Info("item traité avec succès")
+			if err := w.bs.FinishItem(job.BatchItemID, true, job.OperatorRef, ""); err != nil {
+				return err
+			}
+			return w.ws.SettleItem(job.TenantID, job.Amount, job.CommissionAmount, job.BatchItemID, job.BatchID, true)
+		case "pending":
+			if job.Attempt < w.cfg.MaxRetries-1 {
+				reason := fmt.Sprintf("status opérateur: pending — %s", resp.Message)
+				w.log.WithFields(logrus.Fields{
+					"item_id": job.BatchItemID,
+					"ref":     job.OperatorRef,
+				}).Info("item en attente opérateur")
+				return w.scheduleRetry(ctx, job, reason)
+			}
+		}
+	}
+
 	errMsg := "erreur inconnue"
 	if err != nil {
 		errMsg = err.Error()
@@ -120,19 +183,19 @@ func (w *worker) process(ctx context.Context, job services.DisbursementJob) erro
 		return w.scheduleRetry(ctx, job, errMsg)
 	}
 
-	// Échec définitif après max tentatives
-	log.Printf("[worker] FAILED DEFINITIVE item %s après %d tentatives: %s",
-		job.BatchItemID, job.Attempt+1, errMsg)
+	w.processed.Add(1)
+	w.failed.Add(1)
+	w.log.WithFields(logrus.Fields{
+		"item_id": job.BatchItemID,
+		"attempt": job.Attempt + 1,
+	}).Errorf("échec définitif: %s", errMsg)
 
 	if err := w.bs.FinishItem(job.BatchItemID, false, "", errMsg); err != nil {
 		return err
 	}
-	// Rembourser le montant sur le wallet
-	return w.ws.RefundItem(job.TenantID, job.Amount, job.BatchItemID, job.BatchID)
+	return w.ws.SettleItem(job.TenantID, job.Amount, job.CommissionAmount, job.BatchItemID, job.BatchID, false)
 }
 
-// scheduleRetry pousse le job dans la sorted set de retry avec délai exponentiel.
-// Délai = RetryDelaySec * 2^attempt (30s, 60s, 120s...)
 func (w *worker) scheduleRetry(ctx context.Context, job services.DisbursementJob, reason string) error {
 	delaySeconds := float64(w.cfg.RetryDelaySeconds) * math.Pow(2, float64(job.Attempt))
 	readyAt := time.Now().Add(time.Duration(delaySeconds) * time.Second)
@@ -140,8 +203,12 @@ func (w *worker) scheduleRetry(ctx context.Context, job services.DisbursementJob
 	job.Attempt++
 	data, _ := json.Marshal(job)
 
-	log.Printf("[worker] RETRY item %s — tentative %d dans %.0fs (raison: %s)",
-		job.BatchItemID, job.Attempt, delaySeconds, reason)
+	w.log.WithFields(logrus.Fields{
+		"item_id": job.BatchItemID,
+		"attempt": job.Attempt,
+		"delay_s": delaySeconds,
+		"reason":  reason,
+	}).Info("renvoi programmé")
 
 	if err := w.bs.RetryItem(job.BatchItemID); err != nil {
 		return err
@@ -152,7 +219,6 @@ func (w *worker) scheduleRetry(ctx context.Context, job services.DisbursementJob
 	}).Err()
 }
 
-// retryScheduler tourne toutes les 10 secondes et re-queue les jobs prêts.
 func (w *worker) retryScheduler() {
 	ctx := context.Background()
 	ticker := time.NewTicker(10 * time.Second)
@@ -161,13 +227,12 @@ func (w *worker) retryScheduler() {
 	for range ticker.C {
 		now := float64(time.Now().Unix())
 
-		// Récupérer tous les jobs dont le score (timestamp) <= now
 		members, err := w.rdb.ZRangeByScore(ctx, services.QueueRetry, &redis.ZRangeBy{
 			Min: "0",
 			Max: fmt.Sprintf("%f", now),
 		}).Result()
 		if err != nil {
-			log.Printf("[retry-scheduler] ZRangeByScore error: %v", err)
+			w.log.Errorf("retry-scheduler ZRangeByScore error: %v", err)
 			continue
 		}
 
@@ -181,9 +246,9 @@ func (w *worker) retryScheduler() {
 			pipe.ZRem(ctx, services.QueueRetry, m)
 		}
 		if _, err := pipe.Exec(ctx); err != nil {
-			log.Printf("[retry-scheduler] pipeline error: %v", err)
+			w.log.Errorf("retry-scheduler pipeline error: %v", err)
 		} else {
-			log.Printf("[retry-scheduler] %d job(s) re-enqueués", len(members))
+			w.log.Infof("retry-scheduler: %d job(s) re-enqueués", len(members))
 		}
 	}
 }

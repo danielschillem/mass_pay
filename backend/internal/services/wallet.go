@@ -3,6 +3,7 @@ package services
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -37,16 +38,29 @@ func (s *WalletService) GetOrCreate(tenantID uuid.UUID) (*models.Wallet, error) 
 	return &w, err
 }
 
-// Recharge crédite le wallet. Opération simple, initiée manuellement
-// après confirmation de virement bancaire ou dépôt mobile.
-func (s *WalletService) Recharge(tenantID uuid.UUID, amount int64, reference string, byUserID uuid.UUID) (*models.Wallet, error) {
+// Recharge crédite le wallet. La référence est auto-générée au format
+// YYYY-MYNA-XXXX (compteur global annuel), calculée dans la transaction
+// pour éviter les doublons sous concurrence.
+func (s *WalletService) Recharge(tenantID uuid.UUID, amount int64, byUserID uuid.UUID) (*models.Wallet, string, error) {
 	if amount <= 0 {
-		return nil, errors.New("montant de recharge invalide")
+		return nil, "", errors.New("montant de recharge invalide")
 	}
 
 	var wallet models.Wallet
+	var reference string
+
 	err := s.db.Transaction(func(tx *gorm.DB) error {
-		// Lock pour éviter les race conditions
+		// Compteur annuel global des recharges → référence unique
+		var count int64
+		if err := tx.Model(&models.WalletTransaction{}).
+			Where("type = ?", models.WalletTxRecharge).
+			Where("EXTRACT(YEAR FROM created_at) = ?", time.Now().Year()).
+			Count(&count).Error; err != nil {
+			return err
+		}
+		reference = fmt.Sprintf("%d-MYNA-%04d", time.Now().Year(), count+1)
+
+		// Lock pour éviter les race conditions sur le solde
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").
 			Where("tenant_id = ?", tenantID).First(&wallet).Error; err != nil {
 			return ErrWalletNotFound
@@ -59,8 +73,7 @@ func (s *WalletService) Recharge(tenantID uuid.UUID, amount int64, reference str
 			return err
 		}
 
-		// Journal
-		tx.Create(&models.WalletTransaction{
+		if err := tx.Create(&models.WalletTransaction{
 			WalletID:      wallet.ID,
 			TenantID:      tenantID,
 			Type:          models.WalletTxRecharge,
@@ -70,10 +83,12 @@ func (s *WalletService) Recharge(tenantID uuid.UUID, amount int64, reference str
 			Reference:     reference,
 			Note:          "recharge manuelle",
 			CreatedBy:     byUserID,
-		})
+		}).Error; err != nil {
+			return err
+		}
 		return nil
 	})
-	return &wallet, err
+	return &wallet, reference, err
 }
 
 // Reserve bloque (provision_amount) sur le wallet pour un batch.
@@ -98,7 +113,7 @@ func (s *WalletService) Reserve(tx *gorm.DB, tenantID uuid.UUID, amount int64, b
 		return err
 	}
 
-	tx.Create(&models.WalletTransaction{
+	if err := tx.Create(&models.WalletTransaction{
 		WalletID:      wallet.ID,
 		TenantID:      tenantID,
 		Type:          models.WalletTxBatchDebit,
@@ -108,29 +123,16 @@ func (s *WalletService) Reserve(tx *gorm.DB, tenantID uuid.UUID, amount int64, b
 		BatchID:       &batchID,
 		Note:          "provision batch — fonds bloqués",
 		CreatedBy:     byUserID,
-	})
+	}).Error; err != nil {
+		return err
+	}
 	return nil
 }
 
-// CommitBatch finalise la provision : reserved -= provision, commission enregistrée.
-// Les fonds partent effectivement vers les bénéficiaires.
-func (s *WalletService) CommitBatch(tx *gorm.DB, tenantID uuid.UUID, totalAmount, commission int64, batchID uuid.UUID) error {
-	var wallet models.Wallet
-	if err := tx.Set("gorm:query_option", "FOR UPDATE").
-		Where("tenant_id = ?", tenantID).First(&wallet).Error; err != nil {
-		return ErrWalletNotFound
-	}
-
-	provision := totalAmount + commission
-	wallet.ReservedBalance -= provision
-	wallet.TotalDebited += totalAmount
-	wallet.TotalCommission += commission
-
-	return tx.Save(&wallet).Error
-}
-
-// RefundItem rembourse un virement échoué sur le wallet disponible.
-func (s *WalletService) RefundItem(tenantID uuid.UUID, amount int64, itemID uuid.UUID, batchID uuid.UUID) error {
+// SettleItem finalise un item après traitement par l'opérateur.
+// - success=true  : déduit (amount + commission) du réservé, enregistre le débit et la commission.
+// - success=false : rembourse intégralement (amount + commission) vers le disponible — aucune commission prélevée.
+func (s *WalletService) SettleItem(tenantID uuid.UUID, amount, commission int64, itemID, batchID uuid.UUID, success bool) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		var wallet models.Wallet
 		if err := tx.Set("gorm:query_option", "FOR UPDATE").
@@ -138,27 +140,53 @@ func (s *WalletService) RefundItem(tenantID uuid.UUID, amount int64, itemID uuid
 			return ErrWalletNotFound
 		}
 
-		before := wallet.AvailableBalance
-		wallet.AvailableBalance += amount
-		wallet.ReservedBalance -= amount
-		wallet.TotalRefunded += amount
-
-		if err := tx.Save(&wallet).Error; err != nil {
-			return err
-		}
-
+		total := amount + commission
 		systemUser := uuid.MustParse("00000000-0000-0000-0000-000000000000")
-		tx.Create(&models.WalletTransaction{
-			WalletID:      wallet.ID,
-			TenantID:      tenantID,
-			Type:          models.WalletTxRefund,
-			Amount:        amount,
-			BalanceBefore: before,
-			BalanceAfter:  wallet.AvailableBalance,
-			BatchID:       &batchID,
-			Note:          fmt.Sprintf("remboursement virement échoué item %s", itemID),
-			CreatedBy:     systemUser,
-		})
+
+		if success {
+			wallet.ReservedBalance -= total
+			wallet.TotalDebited += amount
+			wallet.TotalCommission += commission
+			if err := tx.Save(&wallet).Error; err != nil {
+				return err
+			}
+			if commission > 0 {
+				if err := tx.Create(&models.WalletTransaction{
+					WalletID:      wallet.ID,
+					TenantID:      tenantID,
+					Type:          models.WalletTxCommission,
+					Amount:        -commission,
+					BalanceBefore: wallet.AvailableBalance,
+					BalanceAfter:  wallet.AvailableBalance,
+					BatchID:       &batchID,
+					Note:          fmt.Sprintf("commission virement réussi item %s", itemID),
+					CreatedBy:     systemUser,
+				}).Error; err != nil {
+					return err
+				}
+			}
+		} else {
+			before := wallet.AvailableBalance
+			wallet.AvailableBalance += total
+			wallet.ReservedBalance -= total
+			wallet.TotalRefunded += total
+			if err := tx.Save(&wallet).Error; err != nil {
+				return err
+			}
+			if err := tx.Create(&models.WalletTransaction{
+				WalletID:      wallet.ID,
+				TenantID:      tenantID,
+				Type:          models.WalletTxRefund,
+				Amount:        total,
+				BalanceBefore: before,
+				BalanceAfter:  wallet.AvailableBalance,
+				BatchID:       &batchID,
+				Note:          fmt.Sprintf("remboursement intégral (montant + commission) item échoué %s", itemID),
+				CreatedBy:     systemUser,
+			}).Error; err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 }
