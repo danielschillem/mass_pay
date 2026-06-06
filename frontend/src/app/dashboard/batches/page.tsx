@@ -104,13 +104,13 @@ export default function BatchHistoryPage() {
         </div>
       )}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
+      <div className="page-header" style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
         <div>
           <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0,
             fontFamily:"'Sora',sans-serif" }}>Historique des batchs</h1>
           <p style={{ color:"var(--sub)", fontSize:13, margin:"4px 0 0" }}>{total} batchs au total</p>
         </div>
-        <div style={{ display:"flex", gap:8 }}>
+        <div className="page-actions" style={{ display:"flex", gap:8 }}>
           <button type="button" onClick={() => {
             const ok = exportPDF(filtered);
             if (!ok) {
@@ -162,7 +162,7 @@ export default function BatchHistoryPage() {
       </div>
 
       {loading ? <Loader /> : (
-        <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
+        <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
           <table style={{ width:"100%", borderCollapse:"collapse" }}>
             <thead>
               <tr style={{ borderBottom:"1px solid var(--border)", background:"var(--surf)" }}>

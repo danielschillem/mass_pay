@@ -35,13 +35,13 @@ export default function LoginPage() {
   const disabled = loading || !email || !password;
 
   return (
-    <div style={{ minHeight:"100vh", display:"flex", alignItems:"center",
+    <div className="login-shell" style={{ minHeight:"100vh", display:"flex", alignItems:"center",
       justifyContent:"center", padding:24, fontFamily:"'DM Sans',sans-serif",
       background:"linear-gradient(180deg,#F8FAFC 0%, var(--app-bg) 100%)" }}>
-      <div style={{ width:"100%", maxWidth:980, display:"grid",
+      <div className="login-grid" style={{ width:"100%", maxWidth:980, display:"grid",
         gridTemplateColumns:"minmax(320px, 420px) minmax(320px, 1fr)",
         gap:28, alignItems:"stretch" }}>
-        <section style={{ background:"var(--card)", border:"1px solid var(--border)",
+        <section className="login-card" style={{ background:"var(--card)", border:"1px solid var(--border)",
           borderRadius:8, padding:32, boxShadow:"var(--shadow)" }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:36 }}>
             <div style={{ width:42, height:42, background:"var(--gold)", borderRadius:8,
@@ -123,7 +123,7 @@ export default function LoginPage() {
           </button>
         </section>
 
-        <section style={{ border:"1px solid var(--border)", borderRadius:8,
+        <section className="login-side" style={{ border:"1px solid var(--border)", borderRadius:8,
           background:"var(--surf)",
           boxShadow:"var(--shadow)", padding:32, display:"flex",
           flexDirection:"column", justifyContent:"space-between", minHeight:420 }}>
@@ -142,7 +142,7 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)",
+          <div className="login-feature-grid" style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)",
             gap:12, marginTop:28 }}>
             {["KYB", "Wallet", "Batchs"].map(label => (
               <div key={label} style={{ background:"var(--card)",

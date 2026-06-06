@@ -542,7 +542,7 @@ export default function BeneficiariesPage() {
         </div>
       )}
 
-      <div style={{ display:"flex", justifyContent:"space-between",
+      <div className="page-header" style={{ display:"flex", justifyContent:"space-between",
         alignItems:"flex-start", marginBottom:24 }}>
         <div>
           <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0,
@@ -551,7 +551,7 @@ export default function BeneficiariesPage() {
             Annuaire · {total} contacts
           </p>
         </div>
-        <div style={{ display:"flex", gap:10 }}>
+        <div className="page-actions" style={{ display:"flex", gap:10 }}>
           <button type="button" onClick={() => setShowImport(true)}
             style={{ background:"var(--elevated)", border:"1px solid var(--border)",
               color:"var(--mid)", padding:"9px 16px", borderRadius:9, fontWeight:600,
@@ -568,7 +568,7 @@ export default function BeneficiariesPage() {
         </div>
       </div>
 
-      <div style={{ display:"flex", gap:12, marginBottom:16 }}>
+      <div className="toolbar-row" style={{ display:"flex", gap:12, marginBottom:16 }}>
         <div style={{ position:"relative", flex:1 }}>
           <Search size={14} style={{ position:"absolute", left:14, top:"50%",
             transform:"translateY(-50%)", color:"var(--sub)" }} />
@@ -598,7 +598,7 @@ export default function BeneficiariesPage() {
         {groupFilter && <span> · Groupe : <b>{groupFilter}</b></span>}
       </div>
 
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)",
+      <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--border)",
         borderRadius:8, overflow:"hidden" }}>
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>

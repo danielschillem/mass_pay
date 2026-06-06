@@ -40,34 +40,36 @@ export function Sidebar({ mode }: { mode: "admin" | "tenant" }) {
   };
 
   return (
-    <div style={{ width:264, background:"rgba(255,255,255,.94)", borderRight:"1px solid var(--border)",
+    <div className="app-sidebar" style={{ width:264, background:"rgba(255,255,255,.94)", borderRight:"1px solid var(--border)",
       padding:"18px 14px", display:"flex", flexDirection:"column",
       flexShrink:0, height:"100%", fontFamily:"'DM Sans',sans-serif",
       boxShadow:"12px 0 34px rgba(17,26,39,.045)", backdropFilter:"blur(18px)" }}>
-      <div style={{ padding:"2px 8px 18px", marginBottom:8,
+      <div className="app-sidebar-logo" style={{ padding:"2px 8px 18px", marginBottom:8,
         borderBottom:"1px solid var(--border-soft)" }}>
         <LogoMark />
       </div>
-      {nav.map(item => {
-        const active = pathname === item.href || (item.href !== "/admin" && item.href !== "/dashboard" && pathname.startsWith(item.href));
-        return (
-          <Link key={item.href} href={item.href} style={{ textDecoration:"none" }}>
-            <div style={{ display:"flex", alignItems:"center", gap:11, padding:"10px 11px",
-              borderRadius:8, marginBottom:5,
-              background: active ? "linear-gradient(180deg,#fff,var(--gold-sub))" : "transparent",
-              border: `1px solid ${active ? "var(--gold-border)" : "transparent"}`,
-              color: active ? "var(--gold-strong)" : "var(--mid)",
-              fontWeight: active ? 700 : 500, fontSize:13, cursor:"pointer",
-              transition:"all .16s", boxShadow: active ? "var(--shadow-xs)" : "none" }}>
-              <item.icon size={15} style={{ flexShrink:0 }} />
-              <span>{item.label}</span>
-              {active && <ChevronRight size={12} style={{ marginLeft:"auto" }} />}
-            </div>
-          </Link>
-        );
-      })}
+      <nav className="app-sidebar-nav">
+        {nav.map(item => {
+          const active = pathname === item.href || (item.href !== "/admin" && item.href !== "/dashboard" && pathname.startsWith(item.href));
+          return (
+            <Link key={item.href} href={item.href} style={{ textDecoration:"none" }}>
+              <div className="app-sidebar-nav-item" style={{ display:"flex", alignItems:"center", gap:11, padding:"10px 11px",
+                borderRadius:8, marginBottom:5,
+                background: active ? "linear-gradient(180deg,#fff,var(--gold-sub))" : "transparent",
+                border: `1px solid ${active ? "var(--gold-border)" : "transparent"}`,
+                color: active ? "var(--gold-strong)" : "var(--mid)",
+                fontWeight: active ? 700 : 500, fontSize:13, cursor:"pointer",
+                transition:"all .16s", boxShadow: active ? "var(--shadow-xs)" : "none" }}>
+                <item.icon size={15} style={{ flexShrink:0 }} />
+                <span className="app-sidebar-nav-label">{item.label}</span>
+                {active && <ChevronRight className="app-sidebar-active-indicator" size={12} style={{ marginLeft:"auto" }} />}
+              </div>
+            </Link>
+          );
+        })}
+      </nav>
 
-      <div style={{ marginTop:"auto", paddingTop:14,
+      <div className="app-sidebar-footer" style={{ marginTop:"auto", paddingTop:14,
         borderTop:"1px solid var(--border-soft)" }}>
         <button onClick={logout} style={{ display:"flex", alignItems:"center", gap:10,
           padding:"10px 12px", borderRadius:8, color:"var(--sub)", fontWeight:700,

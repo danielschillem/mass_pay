@@ -12,7 +12,7 @@ export function StatCard({
   const fg = color ?? "var(--gold)";
   const bg = color ? `color-mix(in srgb, ${color} 12%, transparent)` : "var(--gold-sub)";
   return (
-    <div style={{ background:"linear-gradient(180deg,#fff,var(--elevated))",
+    <div className="stat-card" style={{ background:"linear-gradient(180deg,#fff,var(--elevated))",
       border:"1px solid var(--border)", borderRadius:8,
       padding:"18px 20px", flex:1, minWidth:150, boxShadow:"var(--shadow-xs)" }}>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start" }}>

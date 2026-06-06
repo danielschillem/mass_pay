@@ -255,7 +255,7 @@ export default function UsersPage() {
         </div>
       )}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
+      <div className="page-header" style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
         <div>
           <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"'Sora',sans-serif" }}>
             Mon équipe
@@ -271,7 +271,7 @@ export default function UsersPage() {
         </button>
       </div>
 
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
+      <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
         {loading ? <Spinner /> : users.length === 0 ? (
           <div style={{ padding:"40px 20px", textAlign:"center", color:"var(--sub)", fontSize:13 }}>
             Aucun utilisateur · invitez votre équipe

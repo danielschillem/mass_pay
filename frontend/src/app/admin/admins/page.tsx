@@ -67,7 +67,7 @@ export default function AdminUsersPage() {
         flash("Admin modifié");
       }} />}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
+      <div className="page-header" style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
         <div>
           <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0,
             fontFamily:"'Sora',sans-serif" }}>Administrateurs</h1>
@@ -84,7 +84,7 @@ export default function AdminUsersPage() {
         </button>
       </div>
 
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
+      <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
         {loading ? (
           <div style={{ padding:40, textAlign:"center", color:"var(--sub)" }}>Chargement…</div>
         ) : users.length === 0 ? (

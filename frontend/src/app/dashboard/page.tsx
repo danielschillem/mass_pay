@@ -91,10 +91,10 @@ export default function TenantDashboard() {
       </div>
 
       {/* Wallet card */}
-      <div style={{ background:"linear-gradient(180deg,#fff,var(--elevated))",
+      <div className="data-card" style={{ background:"linear-gradient(180deg,#fff,var(--elevated))",
         border:"1px solid var(--border)", borderRadius:8, padding:22,
         marginBottom:22, boxShadow:"var(--shadow-xs)" }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start",
+        <div className="mobile-stack" style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start",
           gap:20, marginBottom:18 }}>
           <div style={{ display:"flex", alignItems:"flex-start", gap:14 }}>
             <div style={{ width:42, height:42, borderRadius:8, background:"var(--gold-sub)",
@@ -132,7 +132,7 @@ export default function TenantDashboard() {
           </div>
         </div>
 
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:12 }}>
+        <div className="responsive-grid-3" style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:12 }}>
           {[
             { label:"Réservé", value: wallet ? fcfa(wallet.reserved_balance) : "—", color:"var(--gold)", bg:"var(--gold-sub)", border:"var(--gold-border)" },
             { label:"Total débité", value: wallet ? fcfa(wallet.total_debited) : "—", color:"var(--blue)", bg:"var(--blue-sub)", border:"var(--blue-border)" },
@@ -164,9 +164,9 @@ export default function TenantDashboard() {
         <StatCard icon={AlertTriangle} label="Virements échoués" value={stats?.failed_items ?? 0}   color="var(--red)" />
       </div>
 
-      <div style={{ display:"flex", gap:16 }}>
+      <div className="responsive-row" style={{ display:"flex", gap:16 }}>
         {/* Derniers batchs */}
-        <div style={{ flex:2, background:"var(--card)", border:"1px solid var(--border)",
+        <div className="data-card" style={{ flex:2, background:"var(--card)", border:"1px solid var(--border)",
           borderRadius:8, overflow:"hidden" }}>
           <div style={{ padding:"15px 22px", borderBottom:"1px solid var(--border)",
             display:"flex", justifyContent:"space-between", alignItems:"center" }}>
@@ -224,7 +224,7 @@ export default function TenantDashboard() {
         </div>
 
         {/* Actions rapides */}
-        <div style={{ flex:1, background:"var(--card)", border:"1px solid var(--border)",
+        <div className="data-card" style={{ flex:1, background:"var(--card)", border:"1px solid var(--border)",
           borderRadius:8, padding:20 }}>
           <div style={{ fontWeight:700, fontSize:14, marginBottom:16,
             fontFamily:"'Sora',sans-serif" }}>Actions rapides</div>

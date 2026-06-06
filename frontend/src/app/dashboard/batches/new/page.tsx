@@ -136,7 +136,7 @@ export default function NewBatchPage() {
       </div>
 
       {/* Stepper */}
-      <div style={{ display:"flex", alignItems:"center", marginBottom:32 }}>
+      <div className="stepper" style={{ display:"flex", alignItems:"center", marginBottom:32 }}>
         {[{n:1,l:"Informations"},{n:2,l:"Bénéficiaires"},{n:3,l:"Validation"}].map((s, i) => (
           <div key={s.n} style={{ display:"flex", alignItems:"center" }}>
             <div style={{ display:"flex", alignItems:"center", gap:10 }}>
@@ -203,7 +203,7 @@ export default function NewBatchPage() {
       {/* Step 2 */}
       {step===2 && (
         <div>
-          <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, flexWrap:"wrap", gap:10 }}>
+          <div className="toolbar-row" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:14, flexWrap:"wrap", gap:10 }}>
             <div style={{ display:"flex", alignItems:"center", gap:12 }}>
               <span style={{ color:"var(--mid)", fontSize:13 }}>
                 <b style={{ color:"var(--text)" }}>{selected.size}</b> bénéficiaire(s) sélectionné(s)
@@ -212,7 +212,7 @@ export default function NewBatchPage() {
                 · {selBenefs.reduce((a, b) => a + (amounts[b.id] ?? 0), 0).toLocaleString("fr-FR")} F
               </span>
             </div>
-            <div style={{ display:"flex", gap:6 }}>
+            <div className="page-actions" style={{ display:"flex", gap:6 }}>
               <button type="button" onClick={() => {
                 if (selected.size === benefs.length) setSelected(new Set());
                 else setSelected(new Set(benefs.map(b => b.id)));
@@ -247,7 +247,7 @@ export default function NewBatchPage() {
                 onChange={e => { const f = e.target.files?.[0]; if (f) { handleCsvUpload(f); e.target.value = ""; } }} />
             </div>
           </div>
-          <div style={{ background:"var(--card)", border:"1px solid var(--border)",
+          <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--border)",
             borderRadius:8, overflow:"hidden", marginBottom:20 }}>
             <table style={{ width:"100%", borderCollapse:"collapse" }}>
               <thead>
@@ -305,7 +305,7 @@ export default function NewBatchPage() {
                   <Trash2 size={11} /> Vider
                 </button>
               </div>
-              <div style={{ background:"var(--card)", border:"1px solid var(--gold-sub-strong)",
+              <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--gold-sub-strong)",
                 borderRadius:8, overflow:"hidden" }}>
                 <table style={{ width:"100%", borderCollapse:"collapse" }}>
                   <thead>
@@ -345,7 +345,7 @@ export default function NewBatchPage() {
             </div>
           )}
 
-          <div style={{ display:"flex", gap:10 }}>
+          <div className="page-actions" style={{ display:"flex", gap:10 }}>
             <button onClick={() => setStep(1)} style={{ background:"var(--elevated)",
               border:"1px solid var(--border)", color:"var(--mid)", padding:"11px 20px",
               borderRadius:8, fontWeight:600, cursor:"pointer", fontSize:13 }}>← Retour</button>
@@ -360,9 +360,9 @@ export default function NewBatchPage() {
 
       {/* Step 3 — Recap */}
       {step===3 && (
-        <div style={{ display:"flex", gap:20, flexWrap:"wrap" as const }}>
+        <div className="responsive-row" style={{ display:"flex", gap:20, flexWrap:"wrap" as const }}>
           <div style={{ flex:2, minWidth:280 }}>
-            <div style={{ background:"var(--card)", border:"1px solid var(--border)",
+            <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--border)",
               borderRadius:8, overflow:"hidden" }}>
               <div style={{ padding:"14px 20px", borderBottom:"1px solid var(--border)",
                 display:"flex", justifyContent:"space-between", alignItems:"center" }}>

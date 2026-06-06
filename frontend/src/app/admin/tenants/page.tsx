@@ -299,7 +299,7 @@ export default function AdminTenantsPage() {
         </div>
       )}
 
-      <div style={{ display:"flex", justifyContent:"space-between",
+      <div className="page-header" style={{ display:"flex", justifyContent:"space-between",
         alignItems:"flex-start", marginBottom:24 }}>
         <div>
           <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0,
@@ -327,7 +327,7 @@ export default function AdminTenantsPage() {
             fontSize:13, outline:"none", boxSizing:"border-box" as const }} />
       </div>
 
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)",
+      <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--border)",
         borderRadius:8, overflow:"hidden" }}>
         {loading ? (
           <div style={{ padding:40, textAlign:"center", color:"var(--sub)" }}>Chargement…</div>

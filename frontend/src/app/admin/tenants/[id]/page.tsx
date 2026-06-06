@@ -137,7 +137,7 @@ export default function TenantDetailPage() {
       )}
 
       {/* Header */}
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:26 }}>
+      <div className="page-header mobile-stack" style={{ display:"flex", alignItems:"center", gap:12, marginBottom:26 }}>
         <button type="button" onClick={() => router.back()} aria-label="Retour"
           style={{ background:"var(--elevated)", border:"1px solid var(--border)", borderRadius:8,
             padding:"7px 10px", cursor:"pointer", color:"var(--mid)" }}>
@@ -186,7 +186,7 @@ export default function TenantDetailPage() {
       </div>
 
       {/* Compteurs */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, marginBottom:24 }}>
+      <div className="responsive-grid-auto" style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, marginBottom:24 }}>
         {[
           { label:"Utilisateurs",  val:user_count,  icon:<Users size={16} color="var(--blue)" />,       color:"var(--blue)" },
           { label:"Bénéficiaires", val:benef_count, icon:<Users size={16} color="var(--green)" />,       color:"var(--green)" },
@@ -212,12 +212,12 @@ export default function TenantDetailPage() {
       </div>
 
       {/* Formulaire d'édition */}
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:26, marginBottom:24 }}>
+      <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:26, marginBottom:24 }}>
         <h2 style={{ margin:"0 0 20px", fontSize:15, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
           Informations & Configuration
         </h2>
         <form onSubmit={handleSave}>
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
+          <div className="responsive-grid-auto" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
             {[
               { label:"Raison sociale", key:"raison_sociale", type:"text" },
               { label:"Secteur",        key:"secteur",        type:"text" },
@@ -233,7 +233,7 @@ export default function TenantDetailPage() {
             ))}
           </div>
 
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14, marginBottom:20 }}>
+          <div className="responsive-grid-3" style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14, marginBottom:20 }}>
             {[
               { label:"Taux commission (ex: 0.015)", key:"commission_rate",       type:"number", step:"0.001" },
               { label:"Seuil double validation (FCFA)", key:"validation_threshold", type:"number", step:"1"     },
@@ -251,7 +251,7 @@ export default function TenantDetailPage() {
           </div>
 
           {/* Read-only info + URL */}
-          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
+          <div className="responsive-grid-auto" style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14, marginBottom:14 }}>
             {[
               { label:"RCCM", val:tenant.rccm },
               { label:"IFU",  val:tenant.ifu  },
@@ -271,7 +271,7 @@ export default function TenantDetailPage() {
             <label style={{ display:"block", fontSize:11, color:"var(--mid)", marginBottom:5, fontWeight:600 }}>
               URL d&apos;accès tenant
             </label>
-            <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+            <div className="mobile-stack" style={{ display:"flex", alignItems:"center", gap:8 }}>
               <div style={{ flex:1, background:"var(--surf)", border:"1px solid var(--border)",
                 borderRadius:8, padding:"9px 14px", display:"flex", alignItems:"center", gap:10 }}>
                 <ExternalLink size={13} color="var(--blue)" style={{ flexShrink:0 }} />
@@ -317,8 +317,8 @@ export default function TenantDetailPage() {
       </div>
 
       {/* Wallet */}
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:26, marginBottom:24 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+      <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:26, marginBottom:24 }}>
+        <div className="mobile-stack" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <h2 style={{ margin:0, fontSize:15, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
             Wallet
           </h2>
@@ -332,7 +332,7 @@ export default function TenantDetailPage() {
 
         {/* Soldes */}
         {tenant.wallet ? (
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, marginBottom:20 }}>
+          <div className="responsive-grid-auto" style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, marginBottom:20 }}>
             {[
               { label:"Disponible",   val:tenant.wallet.available_balance, color:"var(--green)" },
               { label:"Réservé",      val:tenant.wallet.reserved_balance,  color:"var(--gold)" },
@@ -441,8 +441,8 @@ export default function TenantDetailPage() {
       )}
 
       {/* Équipe du tenant */}
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:26 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+      <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:26 }}>
+        <div className="mobile-stack" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
           <h2 style={{ margin:0, fontSize:15, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
             Équipe · {tenantUsers.length} utilisateur{tenantUsers.length !== 1 ? "s" : ""}
           </h2>
@@ -603,7 +603,7 @@ function RechargeModal({ tenantId, tenantName, onClose, onSuccess }: {
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
       display:"flex", alignItems:"center", justifyContent:"center" }}
       onClick={e => { if (e.target === e.currentTarget && !done) onClose(); }}>
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)",
+      <div className="modal-panel" style={{ background:"var(--card)", border:"1px solid var(--border)",
         borderRadius:10, padding:30, width:460 }}>
 
         {/* Header */}
@@ -760,7 +760,7 @@ function CreateTenantUserModal({ tenantId, onClose, onCreated }: {
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
       display:"flex", alignItems:"center", justifyContent:"center" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:28, width:440 }}>
+      <div className="modal-panel" style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:28, width:440 }}>
         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:22 }}>
           <h2 style={{ margin:0, fontSize:16, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
             Ajouter un utilisateur
@@ -831,7 +831,7 @@ function EditTenantUserModal({ tenantId, user, onClose, onSaved }: {
     <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
       display:"flex", alignItems:"center", justifyContent:"center" }}
       onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:28, width:440 }}>
+      <div className="modal-panel" style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, padding:28, width:440 }}>
         <div style={{ display:"flex", justifyContent:"space-between", marginBottom:22 }}>
           <h2 style={{ margin:0, fontSize:16, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
             Modifier l&apos;utilisateur

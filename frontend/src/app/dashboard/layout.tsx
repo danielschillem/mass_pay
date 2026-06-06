@@ -38,14 +38,14 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   if (!ready) return <SplashLoader />;
 
   return (
-    <div style={{ background:"var(--bg)", minHeight:"100vh",
+    <div className="app-shell" style={{ background:"var(--bg)", minHeight:"100vh",
       display:"flex", flexDirection:"column", fontFamily:"'DM Sans',sans-serif" }}>
       <TopBar mode="tenant" tenantName={tenantName} userName={userName} userRole={userRole} />
-      <div style={{ display:"flex", flex:1, overflow:"hidden" }}>
+      <div className="app-body" style={{ display:"flex", flex:1, overflow:"hidden" }}>
         <Sidebar mode="tenant" />
-        <main style={{ flex:1, overflow:"auto", padding:"26px 28px 38px",
+        <main className="app-main" style={{ flex:1, overflow:"auto", padding:"26px 28px 38px",
           background:"linear-gradient(180deg,#F8FAFC 0%, var(--bg) 220px)" }}>
-          <div style={{ maxWidth:1320, margin:"0 auto" }}>
+          <div className="app-content" style={{ maxWidth:1320, margin:"0 auto" }}>
             {children}
           </div>
         </main>

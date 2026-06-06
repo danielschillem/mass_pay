@@ -130,7 +130,7 @@ export default function KYBDetailPage() {
         </div>
       )}
 
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:26 }}>
+      <div className="page-header mobile-stack" style={{ display:"flex", alignItems:"center", gap:12, marginBottom:26 }}>
         <button type="button" onClick={() => router.back()} aria-label="Retour"
           style={{ background:"var(--elevated)", border:"1px solid var(--border)", borderRadius:8,
             padding:"7px 10px", cursor:"pointer", color:"var(--mid)" }}>
@@ -180,7 +180,7 @@ export default function KYBDetailPage() {
       )}
 
       {/* Tabs */}
-      <div style={{ display:"flex", gap:0, marginBottom:20, borderBottom:"2px solid var(--border)" }}>
+      <div className="stepper" style={{ display:"flex", gap:0, marginBottom:20, borderBottom:"2px solid var(--border)" }}>
         {[
           { key: "documents" as const, label: "Documents", icon: FileText },
           { key: "comments" as const, label: "Commentaires", icon: MessageSquare },
@@ -220,7 +220,7 @@ export default function KYBDetailPage() {
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
           display:"flex", alignItems:"center", justifyContent:"center" }}
           onClick={e => { if (e.target === e.currentTarget) setShowReject(false); }}>
-          <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8,
+          <div className="modal-panel" style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8,
             padding:28, width:440 }}>
             <h3 style={{ margin:"0 0 8px", fontSize:15, fontWeight:800, fontFamily:"'Sora',sans-serif" }}>
               Rejeter le dossier KYB
@@ -323,7 +323,7 @@ function DocumentsTab({ docs, tenantId, onReview, onRefresh }: {
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
           display:"flex", alignItems:"center", justifyContent:"center" }}
           onClick={e => { if (e.target === e.currentTarget) { setRejectDoc(null); setRejectNote(""); } }}>
-          <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8,
+          <div className="modal-panel" style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8,
             padding:28, width:440 }}>
             <div style={{ display:"flex", justifyContent:"space-between", marginBottom:14 }}>
               <div>
@@ -363,7 +363,7 @@ function DocumentsTab({ docs, tenantId, onReview, onRefresh }: {
         </div>
       )}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+      <div className="mobile-stack" style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
         <div style={{ fontSize:13, color:"var(--sub)" }}>
           {docs.filter(d => d.status === "approved").length}/{docs.length} documents approuvés
         </div>
@@ -376,9 +376,9 @@ function DocumentsTab({ docs, tenantId, onReview, onRefresh }: {
       </div>
 
       {showUpload && (
-        <form onSubmit={handleUpload} style={{ background:"var(--surf)", border:"1px solid var(--border)",
+        <form className="data-card" onSubmit={handleUpload} style={{ background:"var(--surf)", border:"1px solid var(--border)",
           borderRadius:8, padding:18, marginBottom:16 }}>
-          <div style={{ display:"grid", gridTemplateColumns:"220px 1fr", gap:12, marginBottom:12 }}>
+          <div className="responsive-grid-auto" style={{ display:"grid", gridTemplateColumns:"220px 1fr", gap:12, marginBottom:12 }}>
             <div>
               <label style={{ display:"block", fontSize:11, color:"var(--mid)", marginBottom:4, fontWeight:600 }}>Type</label>
               <select value={uploadForm.type} onChange={e => setUploadForm(f => ({ ...f, type: e.target.value }))}
@@ -444,7 +444,7 @@ function DocumentsTab({ docs, tenantId, onReview, onRefresh }: {
             </div>
           )}
 
-          <div style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
+          <div className="page-actions" style={{ display:"flex", gap:8, justifyContent:"flex-end" }}>
             <button type="button" onClick={() => { setShowUpload(false); resetUpload(); }}
               style={{ background:"var(--elevated)", border:"1px solid var(--border)",
                 color:"var(--mid)", padding:"8px 16px", borderRadius:8,
@@ -470,7 +470,7 @@ function DocumentsTab({ docs, tenantId, onReview, onRefresh }: {
           const statusColor = doc.status === "approved" ? "var(--green)" :
             doc.status === "rejected" ? "var(--red)" : "var(--gold)";
           return (
-            <div key={doc.id} style={{ background:"var(--card)", border:"1px solid var(--border)",
+            <div key={doc.id} className="data-card mobile-stack" style={{ background:"var(--card)", border:"1px solid var(--border)",
               borderRadius:8, padding:16, display:"flex", alignItems:"flex-start", gap:12 }}>
               <div style={{ width:36, height:36, background:`color-mix(in srgb, ${statusColor} 12%, transparent)`,
                 borderRadius:9, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
@@ -530,7 +530,7 @@ function CommentsTab({ comments, newComment, onCommentChange, onAdd }: {
 }) {
   return (
     <div>
-      <div style={{ display:"flex", gap:10, marginBottom:20 }}>
+      <div className="mobile-stack" style={{ display:"flex", gap:10, marginBottom:20 }}>
         <textarea value={newComment} onChange={e => onCommentChange(e.target.value)}
           placeholder="Ajouter un commentaire…"
           style={{ flex:1, minHeight:44, background:"var(--elevated)",

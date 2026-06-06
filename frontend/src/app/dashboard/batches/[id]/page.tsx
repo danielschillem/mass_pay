@@ -233,7 +233,7 @@ export default function BatchDetailPage() {
       </div>
 
       {/* Stats cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, marginBottom:22 }}>
+      <div className="responsive-grid-auto" style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, marginBottom:22 }}>
         {[
           { label:"Items",         val: batch.item_count,         color:"var(--mid)" },
           { label:"Réussis",       val: batch.success_count,      color:"var(--green)" },
@@ -249,7 +249,7 @@ export default function BatchDetailPage() {
       </div>
 
       {/* Montants */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12, marginBottom:24 }}>
+      <div className="responsive-grid-3" style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)", gap:12, marginBottom:24 }}>
         {[
           { label:"Masse salariale", val: batch.total_amount,      color:"var(--text)" },
           { label:"Commissions",     val: batch.commission_amount, color:"var(--gold)" },
@@ -264,7 +264,7 @@ export default function BatchDetailPage() {
       </div>
 
       {/* Liste des items */}
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
+      <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
         <div style={{ padding:"14px 20px", borderBottom:"1px solid var(--border)" }}>
           <span style={{ fontWeight:700, fontSize:14, fontFamily:"'Sora',sans-serif" }}>
             Bénéficiaires · {items.length} lignes

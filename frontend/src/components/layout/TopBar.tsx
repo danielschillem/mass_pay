@@ -90,13 +90,13 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
   }, [isAdmin]);
 
   return (
-    <div style={{ background:"rgba(255,255,255,.90)", borderBottom:"1px solid var(--border)",
+    <div className="app-topbar" style={{ background:"rgba(255,255,255,.90)", borderBottom:"1px solid var(--border)",
       padding:"0 24px", display:"flex", alignItems:"center",
       height:60, gap:14, flexShrink:0, position:"sticky", top:0, zIndex:100,
       backdropFilter:"blur(18px)", boxShadow:"0 10px 28px rgba(17,26,39,.045)" }}>
-      <div style={{ display:"none" }}><LogoMark /></div>
+      <div className="app-topbar-logo"><LogoMark /></div>
 
-      <div style={{ background: isAdmin ? "var(--gold-sub)" : "var(--blue-sub)",
+      <div className="app-topbar-mode" style={{ background: isAdmin ? "var(--gold-sub)" : "var(--blue-sub)",
         border:`1px solid ${isAdmin ? "var(--gold-border)" : "var(--blue-border)"}`,
         borderRadius:999, padding:"5px 11px", fontSize:11, fontWeight:800,
         color: isAdmin ? "var(--gold-strong)" : "var(--blue)",
@@ -105,15 +105,15 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
       </div>
 
       {!isAdmin && tenantName && (
-        <div style={{ display:"flex", alignItems:"center", gap:7,
+        <div className="app-topbar-tenant" style={{ display:"flex", alignItems:"center", gap:7,
           background:"var(--card)", border:"1px solid var(--border)",
           borderRadius:999, padding:"6px 13px", fontSize:13, boxShadow:"var(--shadow-xs)" }}>
           <Building2 size={12} color="var(--sub)" />
-          <span style={{ fontWeight:700, color:"var(--text)", fontSize:12 }}>{tenantName}</span>
+          <span className="truncate-text" style={{ fontWeight:700, color:"var(--text)", fontSize:12 }}>{tenantName}</span>
         </div>
       )}
 
-      <div style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:12 }}>
+      <div className="app-topbar-right" style={{ marginLeft:"auto", display:"flex", alignItems:"center", gap:12 }}>
 
         {/* Cloche + dropdown */}
         <div ref={ref} style={{ position:"relative" }}>
@@ -133,7 +133,7 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
           </button>
 
           {open && (
-            <div style={{ position:"absolute", right:0, top:"calc(100% + 8px)",
+            <div className="app-topbar-menu" style={{ position:"absolute", right:0, top:"calc(100% + 8px)",
               width:320, background:"var(--card)", border:"1px solid var(--border)",
               borderRadius:8, zIndex:200, overflow:"hidden",
               boxShadow:"var(--shadow)" }}>
@@ -200,7 +200,7 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
         </div>
 
         {/* Avatar */}
-        <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+        <div className="app-topbar-user" style={{ display:"flex", alignItems:"center", gap:9 }}>
           <div style={{ width:36, height:36,
             background: isAdmin ? "var(--gold-sub)" : "var(--blue-sub)",
             borderRadius:8, display:"flex", alignItems:"center",
@@ -209,7 +209,7 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
             border:`1px solid ${isAdmin ? "var(--gold-border)" : "var(--blue-border)"}` }}>
             {initials}
           </div>
-          <div>
+          <div className="app-topbar-user-meta">
             <div style={{ fontSize:12, fontWeight:700, color:"var(--text)", lineHeight:1.2 }}>
               {userName ?? (isAdmin ? "Super Admin" : "Admin")}
             </div>

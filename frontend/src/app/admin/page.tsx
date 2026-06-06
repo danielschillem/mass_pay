@@ -82,7 +82,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Latest tenants */}
-      <div style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
+      <div className="data-card" style={{ background:"var(--card)", border:"1px solid var(--border)", borderRadius:8, overflow:"hidden" }}>
         <div style={{ padding:"15px 22px", borderBottom:"1px solid var(--border)",
           fontWeight:700, fontSize:14, fontFamily:"'Sora',sans-serif" }}>
           Tenants enregistrés

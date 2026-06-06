@@ -44,7 +44,7 @@ export default function KYBPage() {
         </div>
       )}
 
-      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
+      <div className="page-header" style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
         <div>
           <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0,
             fontFamily:"'Sora',sans-serif" }}>KYB · Onboarding</h1>
@@ -60,7 +60,7 @@ export default function KYBPage() {
         </button>
       </div>
 
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:12, marginBottom:16 }}>
+      <div className="responsive-grid-3" style={{ display:"grid", gridTemplateColumns:"repeat(3, minmax(0, 1fr))", gap:12, marginBottom:16 }}>
         {[
           { label:"Dossiers en attente", value:tenants.length, icon:<ShieldCheck size={16} color="var(--gold)" />, color:"var(--gold)" },
           { label:"Identité complète", value:completeInfo, icon:<Check size={16} color="var(--green)" />, color:"var(--green)" },
