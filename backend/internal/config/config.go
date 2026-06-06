@@ -32,14 +32,16 @@ type Config struct {
 
 	// Orange Money BF — Online Payment API (XML-RPC)
 	// Réf. : "Orange Money online payment technical specification document"
-	OrangeEnv            string // "test" | "production"
-	OrangeTestURL        string // https://testom.orange.bf/
-	OrangeProdURL        string // https://apiom.orange.bf/
-	OrangeMerchantMSISDN string // MSISDN marchand MynaPay chez Orange BF
-	OrangeAPIUsername    string // api_username fourni par Orange
-	OrangeAPIPassword    string // api_password fourni par Orange
-	OrangeProvider       string // valeur fixe : "101"
-	OrangePayID          string // valeur fixe : "12"
+	OrangeEnv               string // "test" | "production"
+	OrangeTestURL           string // https://testom.orange.bf/
+	OrangeProdURL           string // https://apiom.orange.bf/
+	OrangeMerchantMSISDN    string // MSISDN marchand MynaPay chez Orange BF
+	OrangeBeneficiaryMSISDN string // MSISDN bénéficiaire/compte Orange BF, si fourni
+	OrangeUSSDMSISDN        string // MSISDN USSD Orange BF, si fourni
+	OrangeAPIUsername       string // api_username fourni par Orange
+	OrangeAPIPassword       string // api_password fourni par Orange
+	OrangeProvider          string // valeur fixe : "101"
+	OrangePayID             string // valeur fixe : "12"
 	// Certificats (optionnels — réservés pour intégrations futures B2B)
 	OrangeCertPublic  string
 	OrangeCertPrivate string
@@ -109,16 +111,18 @@ func Load() *Config {
 		RateLimitEnabled: getEnv("RATE_LIMIT_ENABLED", "true") == "true",
 		RateLimitPerMin:  getEnvInt("RATE_LIMIT_PER_MIN", 60),
 
-		OrangeEnv:            getEnv("ORANGE_MONEY_ENV", "test"),
-		OrangeTestURL:        getEnv("ORANGE_MONEY_TEST_URL", "https://testom.orange.bf/"),
-		OrangeProdURL:        getEnv("ORANGE_MONEY_PROD_URL", "https://apiom.orange.bf/"),
-		OrangeMerchantMSISDN: getEnv("ORANGE_MONEY_MERCHANT_MSISDN", ""),
-		OrangeAPIUsername:    getEnv("ORANGE_MONEY_API_USERNAME", ""),
-		OrangeAPIPassword:    getEnv("ORANGE_MONEY_API_PASSWORD", ""),
-		OrangeProvider:       getEnv("ORANGE_MONEY_PROVIDER", "101"),
-		OrangePayID:          getEnv("ORANGE_MONEY_PAYID", "12"),
-		OrangeCertPublic:     getEnv("ORANGE_MONEY_CERT_PUBLIC", ""),
-		OrangeCertPrivate:    getEnv("ORANGE_MONEY_CERT_PRIVATE", ""),
+		OrangeEnv:               getEnv("ORANGE_MONEY_ENV", "test"),
+		OrangeTestURL:           getEnv("ORANGE_MONEY_TEST_URL", "https://testom.orange.bf/"),
+		OrangeProdURL:           getEnv("ORANGE_MONEY_PROD_URL", "https://apiom.orange.bf/"),
+		OrangeMerchantMSISDN:    getEnv("ORANGE_MONEY_MERCHANT_MSISDN", ""),
+		OrangeBeneficiaryMSISDN: getEnv("ORANGE_MONEY_BENEFICIARY_MSISDN", ""),
+		OrangeUSSDMSISDN:        getEnv("ORANGE_MONEY_USSD_MSISDN", ""),
+		OrangeAPIUsername:       getEnv("ORANGE_MONEY_API_USERNAME", ""),
+		OrangeAPIPassword:       getEnv("ORANGE_MONEY_API_PASSWORD", ""),
+		OrangeProvider:          getEnv("ORANGE_MONEY_PROVIDER", "101"),
+		OrangePayID:             getEnv("ORANGE_MONEY_PAYID", "12"),
+		OrangeCertPublic:        getEnv("ORANGE_MONEY_CERT_PUBLIC", ""),
+		OrangeCertPrivate:       getEnv("ORANGE_MONEY_CERT_PRIVATE", ""),
 
 		MoovEnv:      getEnv("MOOV_ENV", "test"),
 		MoovTestURL:  getEnv("MOOV_TEST_URL", "https://uat.moov-money.bf:38443"),
