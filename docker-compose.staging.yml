@@ -3,7 +3,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    image: masspay-backend:staging
+    image: ${BACKEND_IMAGE:-masspay-backend:staging}
     environment:
       ENV: staging
       GIN_MODE: release
@@ -15,7 +15,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
-    image: masspay-frontend:staging
+    image: ${FRONTEND_IMAGE:-masspay-frontend:staging}
     environment:
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
 
