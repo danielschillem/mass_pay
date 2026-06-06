@@ -24,7 +24,29 @@ masspay-platform/
 
 ---
 
-## Démarrage rapide (Docker)
+## Démarrage local recommandé (Windows/dev)
+
+Le mode le plus stable en développement garde PostgreSQL et Redis dans Docker, puis lance le backend et le frontend depuis le code local.
+Cela évite les images Docker applicatives obsolètes et les conflits autour du port `8080`.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1
+```
+
+- Frontend : http://localhost:3000
+- Backend API : http://localhost:18080
+- Health check : http://localhost:18080/health
+- Logs : `%TEMP%\mass_pay-local`
+
+Pour arrêter les processus locaux :
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1 -Stop
+```
+
+---
+
+## Démarrage rapide (Docker complet)
 
 ```bash
 cp .env.example .env
@@ -36,6 +58,12 @@ docker-compose up -d
 - Backend API : http://localhost:8080
 - API docs : http://localhost:8080/health
 
+Si l'interface ne correspond pas au code local, reconstruire et recréer les services applicatifs :
+
+```bash
+docker-compose up -d --build --force-recreate backend frontend
+```
+
 ---
 
 ## Démarrage manuel
@@ -44,10 +72,9 @@ docker-compose up -d
 
 ```bash
 cd backend
-cp .env.example .env
-# Éditer .env avec vos credentials DB et Redis
+# Charger les variables depuis ../.env ou créer backend/.env
 go mod tidy
-go run cmd/server/main.go
+PORT=18080 go run cmd/server/main.go
 ```
 
 ### Frontend
