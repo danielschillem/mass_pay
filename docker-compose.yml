@@ -25,13 +25,17 @@ services:
     image: redis:7-alpine
     container_name: masspay_redis
     restart: unless-stopped
-    command: redis-server --appendonly yes
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD:?REDIS_PASSWORD est requis}
+      --appendonly yes
+      --loglevel warning
     volumes:
       - redis_data:/data
     ports:
-      - "${REDIS_PORT_BIND:-6379}:6379"
+      - "${REDIS_PORT_BIND:-127.0.0.1:6379}:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
@@ -53,8 +57,8 @@ services:
       PORT: 8080
       GIN_MODE: ${GIN_MODE:-release}
       LOG_LEVEL: ${LOG_LEVEL:-info}
-      DATABASE_URL: postgres://masspay:${DB_PASSWORD:-masspay_secret}@postgres:5432/masspay_bf?sslmode=disable
-      REDIS_URL: redis://redis:6379
+      DATABASE_URL: postgres://masspay:${DB_PASSWORD:-masspay_secret}@postgres:5432/masspay_bf?sslmode=${POSTGRES_SSLMODE:-prefer}
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET est requis}
       JWT_SECRET_PREVIOUS: ${JWT_SECRET_PREVIOUS:-}
       JWT_EXPIRY_HOURS: ${JWT_EXPIRY_HOURS:-24}
@@ -66,6 +70,10 @@ services:
       SUPER_ADMIN_LAST_NAME: ${SUPER_ADMIN_LAST_NAME:-Admin}
       RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
       RATE_LIMIT_PER_MIN: ${RATE_LIMIT_PER_MIN:-60}
+      RATE_LIMIT_LOGIN_PER_MIN: ${RATE_LIMIT_LOGIN_PER_MIN:-10}
+      RATE_LIMIT_FINANCIAL_PER_MIN: ${RATE_LIMIT_FINANCIAL_PER_MIN:-5}
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:-}
+      TOTP_REQUIRED: ${TOTP_REQUIRED:-false}
       DEFAULT_COMMISSION_RATE: ${DEFAULT_COMMISSION_RATE:-0.015}
       VALIDATION_THRESHOLD: ${VALIDATION_THRESHOLD:-500000}
       WORKER_CONCURRENCY: ${WORKER_CONCURRENCY:-5}

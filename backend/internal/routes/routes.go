@@ -19,14 +19,24 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 	r := gin.New()
 	r.Use(gin.Logger(), gin.Recovery())
 
-	// Rate limiting global
+	// Rate limiting global par IP
 	r.Use(middleware.RateLimit(rdb, cfg))
 
-	// CORS minimal — adapter selon les besoins prod
+	// Security headers
+	r.Use(func(c *gin.Context) {
+		c.Header("X-Content-Type-Options", "nosniff")
+		c.Header("X-Frame-Options", "DENY")
+		c.Header("X-XSS-Protection", "1; mode=block")
+		c.Header("Referrer-Policy", "strict-origin-when-cross-origin")
+		c.Header("Permissions-Policy", "geolocation=(), microphone=(), camera=()")
+		c.Next()
+	})
+
+	// CORS
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Authorization,Content-Type")
+		c.Header("Access-Control-Allow-Headers", "Authorization,Content-Type,X-TOTP-Code")
 		if c.Request.Method == http.MethodOptions {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
@@ -34,11 +44,10 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 		c.Next()
 	})
 
-	// Monitoring — accessible sans auth
 	monitoring := handlers.NewMonitoringHandler(db, rdb, cfg, workerFn)
 	r.GET("/health", monitoring.Health)
 
-	authH := handlers.NewAuthHandler(db, cfg)
+	authH := handlers.NewAuthHandler(db, cfg, rdb)
 	adminH := handlers.NewAdminHandler(db, cfg)
 	tenantH := handlers.NewTenantHandler(db, rdb, cfg)
 
@@ -47,15 +56,31 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 	// ── Auth (public) ─────────────────────────────────────────────
 	auth := api.Group("/auth")
 	{
-		auth.POST("/login", authH.Login)
-		auth.POST("/refresh", authH.RefreshToken)
-		auth.POST("/logout", middleware.Auth(cfg), authH.Logout)
-		auth.GET("/me", middleware.Auth(cfg), authH.Me)
+		// Login : rate limit strict 10/min par IP pour limiter les brute force
+		auth.POST("/login",
+			middleware.RateLimitStrict(rdb, cfg.RateLimitLoginPerMin, "login"),
+			authH.Login,
+		)
+		auth.POST("/refresh",
+			middleware.RateLimitStrict(rdb, cfg.RateLimitLoginPerMin, "refresh"),
+			authH.RefreshToken,
+		)
+		auth.POST("/logout", middleware.Auth(cfg, rdb), authH.Logout)
+		auth.GET("/me", middleware.Auth(cfg, rdb), authH.Me)
+
+		// 2FA TOTP — configuration de l'authentification à deux facteurs
+		twoFA := auth.Group("/2fa")
+		twoFA.Use(middleware.Auth(cfg, rdb), middleware.RequireActiveUser(db))
+		{
+			twoFA.POST("/setup", authH.Setup2FA)
+			twoFA.POST("/confirm", authH.Confirm2FA)
+			twoFA.DELETE("", authH.Disable2FA)
+		}
 	}
 
 	// ── Super Admin ───────────────────────────────────────────────
 	admin := api.Group("/admin")
-	admin.Use(middleware.Auth(cfg), middleware.RequireActiveUser(db), middleware.RequireSuperAdmin())
+	admin.Use(middleware.Auth(cfg, rdb), middleware.RequireActiveUser(db), middleware.RequireSuperAdmin())
 	{
 		admin.GET("/stats", adminH.GlobalStatsV2)
 
@@ -67,10 +92,14 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 			tenants.PATCH("/:tenantId", adminH.UpdateTenant)
 			tenants.PATCH("/:tenantId/activate", adminH.ActivateTenant)
 			tenants.PATCH("/:tenantId/suspend", adminH.SuspendTenant)
-			tenants.POST("/:tenantId/wallet/recharge", adminH.RechargeWallet)
+			// Recharge wallet : action financière — 2FA + rate limit strict
+			tenants.POST("/:tenantId/wallet/recharge",
+				middleware.Require2FA(cfg, rdb),
+				middleware.RateLimitStrict(rdb, cfg.RateLimitFinancialPerMin, "admin-recharge"),
+				adminH.RechargeWallet,
+			)
 			tenants.GET("/:tenantId/wallet/transactions", adminH.ListTenantWalletTransactions)
 
-			// Utilisateurs d'un tenant (vue admin)
 			tenantUsers := tenants.Group("/:tenantId/users")
 			{
 				tenantUsers.GET("", adminH.ListTenantUsers)
@@ -91,7 +120,6 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 			}
 		}
 
-		// Gestion des super admins
 		admins := admin.Group("/admins")
 		{
 			admins.GET("", adminH.ListAdminUsers)
@@ -102,11 +130,9 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 	}
 
 	// ── Tenant (self-service) ─────────────────────────────────────
-	// Routes accessibles via le token tenant — le tenantId est implicite.
-	// Un super_admin peut passer un :tenantId explicite pour agir en tant que.
 	tenant := api.Group("/tenant")
 	tenant.Use(
-		middleware.Auth(cfg),
+		middleware.Auth(cfg, rdb),
 		middleware.RequireActiveUser(db),
 		middleware.RequireRole(
 			models.RoleSuperAdmin,
@@ -120,7 +146,6 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 		tenant.GET("/dashboard", tenantH.Dashboard)
 		tenant.GET("/wallet", tenantH.GetWallet)
 
-		// Batchs
 		batches := tenant.Group("/batches")
 		{
 			batches.GET("", tenantH.ListBatches)
@@ -133,13 +158,15 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 				middleware.RequirePermission(middleware.PermBatchValidate),
 				tenantH.ValidateBatch,
 			)
+			// Execute batch : action financière critique — 2FA requis + rate limit par tenant
 			batches.POST("/:batchId/execute",
 				middleware.RequirePermission(middleware.PermBatchExecute),
+				middleware.Require2FA(cfg, rdb),
+				middleware.RateLimitTenant(rdb, cfg.RateLimitFinancialPerMin, "batch-execute"),
 				tenantH.ExecuteBatch,
 			)
 		}
 
-		// Bénéficiaires
 		benef := tenant.Group("/beneficiaries")
 		{
 			benef.GET("", tenantH.ListBeneficiaries)
@@ -157,10 +184,8 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 			)
 		}
 
-		// Transactions wallet
 		tenant.GET("/wallet/transactions", tenantH.ListWalletTransactions)
 
-		// Gestion équipe
 		users := tenant.Group("/users")
 		{
 			users.GET("", tenantH.ListUsers)

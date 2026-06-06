@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -8,9 +9,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/gorm"
 
 	"masspay-bf/internal/config"
+	"masspay-bf/internal/crypto"
 	"masspay-bf/internal/models"
 )
 
@@ -27,11 +30,10 @@ const (
 	ctxTenantID = "tenant_id"
 	ctxRole     = "role"
 	ctxClaims   = "claims"
+	ctxUser     = "current_user"
 )
 
 // jwtKeyFunc retourne la clé correspondant au kid dans le header du token.
-// Si le kid est absent ou ne correspond pas, on essaie la JWT_SECRET courante.
-// En cas d'échec, on essaie JWT_SECRET_PREVIOUS (rotation).
 func jwtKeyFunc(cfg *config.Config) func(t *jwt.Token) (interface{}, error) {
 	return func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
@@ -49,7 +51,6 @@ func jwtKeyFunc(cfg *config.Config) func(t *jwt.Token) (interface{}, error) {
 				return []byte(cfg.JWTSecretPrevious), nil
 			}
 		}
-		// fallback: essayer la clé courante puis l'ancienne
 		if verifyTokenSignature(t, cfg.JWTSecret) {
 			return []byte(cfg.JWTSecret), nil
 		}
@@ -68,12 +69,11 @@ func verifyTokenSignature(t *jwt.Token, key string) bool {
 	if idx <= 0 {
 		return false
 	}
-	signingString := t.Raw[:idx]
-	return t.Method.Verify(signingString, t.Signature, []byte(key)) == nil
+	return t.Method.Verify(t.Raw[:idx], t.Signature, []byte(key)) == nil
 }
 
-// Auth valide le JWT Bearer et injecte les claims dans le contexte.
-func Auth(cfg *config.Config) gin.HandlerFunc {
+// Auth valide le JWT Bearer, vérifie la blacklist Redis et injecte les claims dans le contexte.
+func Auth(cfg *config.Config, rdb *redis.Client) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		if !strings.HasPrefix(header, "Bearer ") {
@@ -89,6 +89,16 @@ func Auth(cfg *config.Config) gin.HandlerFunc {
 			return
 		}
 
+		// Vérification blacklist — token révoqué après logout
+		if claims.ID != "" && rdb != nil {
+			ctx := context.Background()
+			exists, _ := rdb.Exists(ctx, "blacklist:jti:"+claims.ID).Result()
+			if exists > 0 {
+				c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "token révoqué"})
+				return
+			}
+		}
+
 		c.Set(ctxUserID, claims.UserID)
 		c.Set(ctxTenantID, claims.TenantID)
 		c.Set(ctxRole, claims.Role)
@@ -97,9 +107,7 @@ func Auth(cfg *config.Config) gin.HandlerFunc {
 	}
 }
 
-// RequireActiveUser recharge l'utilisateur depuis la base.
-// Cela invalide immédiatement les comptes désactivés/supprimés et applique les
-// changements de rôle sans attendre l'expiration du JWT.
+// RequireActiveUser recharge l'utilisateur depuis la base et le stocke dans le contexte.
 func RequireActiveUser(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		userID := GetCallerID(c)
@@ -118,15 +126,83 @@ func RequireActiveUser(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
+		c.Set(ctxUser, &user)
 		c.Set(ctxTenantID, user.TenantID)
 		c.Set(ctxRole, user.Role)
 		c.Next()
 	}
 }
 
+// Require2FA vérifie le code TOTP via le header X-TOTP-Code pour les actions financières.
+// Anti-replay : chaque code n'est valide qu'une fois par fenêtre de 30 secondes.
+func Require2FA(cfg *config.Config, rdb *redis.Client) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		user := GetCurrentUser(c)
+		if user == nil {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "authentification requise"})
+			return
+		}
+
+		if !user.TOTPEnabled {
+			if cfg.TOTPRequired {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{
+					"error":  "2FA obligatoire pour cette action",
+					"action": "Configurez votre application d'authentification via POST /auth/2fa/setup",
+				})
+				return
+			}
+			// 2FA non encore configuré et non obligatoire — laisser passer
+			c.Next()
+			return
+		}
+
+		code := strings.TrimSpace(c.GetHeader("X-TOTP-Code"))
+		if code == "" {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{
+				"error": "code 2FA requis (header X-TOTP-Code)",
+			})
+			return
+		}
+
+		// Anti-replay : un code ne peut être utilisé qu'une fois par fenêtre (30s)
+		if rdb == nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "service 2FA temporairement indisponible"})
+			return
+		}
+		window := crypto.CurrentTOTPWindow()
+		replayKey := "totp:used:" + user.ID.String() + ":" + window + ":" + code
+		ctx := context.Background()
+		set, err := rdb.SetNX(ctx, replayKey, 1, 90*time.Second).Result()
+		if err != nil {
+			c.AbortWithStatusJSON(http.StatusServiceUnavailable, gin.H{"error": "service 2FA temporairement indisponible"})
+			return
+		}
+		if !set {
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "code 2FA déjà utilisé"})
+			return
+		}
+
+		secret := crypto.DecryptField(user.TOTPSecret)
+		if !crypto.ValidateTOTP(secret, code) {
+			rdb.Del(ctx, replayKey) // annuler la réservation anti-replay si code invalide
+			c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "code 2FA invalide"})
+			return
+		}
+
+		c.Next()
+	}
+}
+
+// BlacklistToken place un JTI dans la blacklist Redis jusqu'à son expiration.
+func BlacklistToken(ctx context.Context, rdb *redis.Client, jti string, expiry time.Time) {
+	ttl := time.Until(expiry)
+	if ttl > 0 && jti != "" {
+		rdb.Set(ctx, "blacklist:jti:"+jti, 1, ttl)
+	}
+}
+
 // ── RBAC par permission ────────────────────────────────────────────
 
-// Permission représente une action spécifique dans le système.
 type Permission string
 
 const (
@@ -154,7 +230,6 @@ const (
 	PermTenantUserDelete  Permission = "tenant_user:delete"
 )
 
-// RolePermissions définit les permissions accordées à chaque rôle.
 var RolePermissions = map[models.UserRole][]Permission{
 	models.RoleSuperAdmin: {
 		PermTenantRead, PermTenantWrite, PermTenantActivate, PermTenantSuspend,
@@ -185,7 +260,6 @@ var RolePermissions = map[models.UserRole][]Permission{
 	},
 }
 
-// RequirePermission vérifie que l'utilisateur possède la permission spécifiée.
 func RequirePermission(perm Permission) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, _ := c.Get(ctxRole)
@@ -199,22 +273,16 @@ func RequirePermission(perm Permission) gin.HandlerFunc {
 			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "accès refusé"})
 			return
 		}
-		allowed := false
 		for _, p := range perms {
 			if p == perm {
-				allowed = true
-				break
+				c.Next()
+				return
 			}
 		}
-		if !allowed {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "permission manquante"})
-			return
-		}
-		c.Next()
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "permission manquante"})
 	}
 }
 
-// RequireRole vérifie que l'utilisateur a l'un des rôles autorisés.
 func RequireRole(roles ...models.UserRole) gin.HandlerFunc {
 	allowed := make(map[models.UserRole]bool)
 	for _, r := range roles {
@@ -230,33 +298,43 @@ func RequireRole(roles ...models.UserRole) gin.HandlerFunc {
 	}
 }
 
-// RequireSuperAdmin raccourci pour les routes Super Admin.
 func RequireSuperAdmin() gin.HandlerFunc {
 	return RequireRole(models.RoleSuperAdmin)
 }
 
-// GetCallerID retourne l'UUID de l'utilisateur depuis le contexte Gin.
+// ── Accesseurs contexte ────────────────────────────────────────────
+
 func GetCallerID(c *gin.Context) uuid.UUID {
 	v, _ := c.Get(ctxUserID)
 	id, _ := v.(uuid.UUID)
 	return id
 }
 
-// GetCallerTenantID retourne le TenantID depuis le contexte (nil pour super_admin).
 func GetCallerTenantID(c *gin.Context) *uuid.UUID {
 	v, _ := c.Get(ctxTenantID)
 	id, _ := v.(*uuid.UUID)
 	return id
 }
 
-// GetCallerRole retourne le rôle depuis le contexte.
 func GetCallerRole(c *gin.Context) models.UserRole {
 	v, _ := c.Get(ctxRole)
 	role, _ := v.(models.UserRole)
 	return role
 }
 
-// GenerateAccessToken génère un JWT signé avec support kid pour rotation.
+func GetCurrentUser(c *gin.Context) *models.User {
+	v, _ := c.Get(ctxUser)
+	u, _ := v.(*models.User)
+	return u
+}
+
+func GetCurrentClaims(c *gin.Context) *Claims {
+	v, _ := c.Get(ctxClaims)
+	cl, _ := v.(*Claims)
+	return cl
+}
+
+// GenerateAccessToken génère un JWT signé avec JTI pour support de blacklist.
 func GenerateAccessToken(cfg *config.Config, user *models.User) (string, error) {
 	now := time.Now()
 	claims := Claims{
@@ -265,6 +343,7 @@ func GenerateAccessToken(cfg *config.Config, user *models.User) (string, error) 
 		Role:     user.Role,
 		KeyID:    "current",
 		RegisteredClaims: jwt.RegisteredClaims{
+			ID:        uuid.New().String(), // JTI — identifiant unique du token pour blacklist
 			Subject:   user.ID.String(),
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(time.Duration(cfg.JWTExpiryHours) * time.Hour)),

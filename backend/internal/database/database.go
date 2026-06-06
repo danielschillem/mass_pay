@@ -12,6 +12,7 @@ import (
 	"gorm.io/gorm/logger"
 
 	"masspay-bf/internal/config"
+	"masspay-bf/internal/crypto"
 	"masspay-bf/internal/models"
 )
 
@@ -55,6 +56,30 @@ func Migrate(db *gorm.DB, log *logrus.Logger) {
 	// Activer l'extension pgcrypto pour gen_random_uuid()
 	db.Exec("CREATE EXTENSION IF NOT EXISTS \"pgcrypto\"")
 
+	// ── Pré-migration : changements que AutoMigrate ne gère pas ──────
+	//
+	// 1. Agrandir les colonnes chiffrées (AES-256-GCM produit ~500 chars base64)
+	//    avant AutoMigrate pour éviter une troncature silencieuse.
+	// 2. Supprimer les anciens index uniques portés sur les valeurs en clair ;
+	//    les nouveaux index (ifu_hash, idx_tenant_phone_hash) seront recréés par AutoMigrate.
+	preMigrations := []string{
+		// Tenant — IFU et RCCM
+		`ALTER TABLE tenants ALTER COLUMN ifu TYPE varchar(500)`,
+		`ALTER TABLE tenants ALTER COLUMN rccm TYPE varchar(500)`,
+		`DROP INDEX IF EXISTS idx_tenants_ifu`,
+
+		// Beneficiary — phone_number
+		`ALTER TABLE beneficiaries ALTER COLUMN phone_number TYPE varchar(500)`,
+		`DROP INDEX IF EXISTS idx_tenant_phone`,
+	}
+	for _, sql := range preMigrations {
+		if err := db.Exec(sql).Error; err != nil {
+			// Les erreurs "column does not exist" ou "index does not exist" sont normales
+			// sur une base fraîche — on les ignore.
+			log.Debugf("pré-migration (ignorée si base fraîche) : %s — %v", sql, err)
+		}
+	}
+
 	err := db.AutoMigrate(
 		&models.Tenant{},
 		&models.User{},
@@ -72,6 +97,49 @@ func Migrate(db *gorm.DB, log *logrus.Logger) {
 		log.Fatalf("migration échouée: %v", err)
 	}
 	log.Info("migrations appliquées")
+}
+
+// EncryptExistingData chiffre les champs sensibles existants encore en clair.
+// Idempotent : les valeurs déjà chiffrées (base64 valide décodable par la clé) sont ignorées.
+// À appeler après Migrate(), uniquement si la clé de chiffrement est configurée.
+func EncryptExistingData(db *gorm.DB, log *logrus.Logger) {
+	// ── Tenants ──────────────────────────────────────────────────────
+	var tenants []struct {
+		ID   string
+		IFU  string
+		RCCM string
+	}
+	db.Raw("SELECT id, ifu, rccm FROM tenants").Scan(&tenants)
+	for _, t := range tenants {
+		encIFU := crypto.EncryptField(t.IFU)
+		encRCCM := crypto.EncryptField(t.RCCM)
+		hashIFU := crypto.HashField(t.IFU)
+		if err := db.Exec(
+			"UPDATE tenants SET ifu = ?, rccm = ?, ifu_hash = ? WHERE id = ? AND (ifu_hash IS NULL OR ifu_hash = '')",
+			encIFU, encRCCM, hashIFU, t.ID,
+		).Error; err != nil {
+			log.Warnf("encrypt tenant %s : %v", t.ID, err)
+		}
+	}
+
+	// ── Beneficiaries ─────────────────────────────────────────────────
+	var beneficiaries []struct {
+		ID          string
+		PhoneNumber string
+	}
+	db.Raw("SELECT id, phone_number FROM beneficiaries").Scan(&beneficiaries)
+	for _, b := range beneficiaries {
+		encPhone := crypto.EncryptField(b.PhoneNumber)
+		hashPhone := crypto.HashField(b.PhoneNumber)
+		if err := db.Exec(
+			"UPDATE beneficiaries SET phone_number = ?, phone_hash = ? WHERE id = ? AND (phone_hash IS NULL OR phone_hash = '')",
+			encPhone, hashPhone, b.ID,
+		).Error; err != nil {
+			log.Warnf("encrypt beneficiary %s : %v", b.ID, err)
+		}
+	}
+
+	log.Info("migration chiffrement données existantes terminée")
 }
 
 func SeedSuperAdmin(db *gorm.DB, cfg *config.Config, log *logrus.Logger) {

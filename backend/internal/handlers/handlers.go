@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/base64"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/redis/go-redis/v9"
 	"golang.org/x/crypto/bcrypt"
 	"golang.org/x/text/runes"
 	"golang.org/x/text/transform"
@@ -22,11 +24,10 @@ import (
 	"gorm.io/gorm"
 
 	"masspay-bf/internal/config"
+	"masspay-bf/internal/crypto"
 	"masspay-bf/internal/middleware"
 	"masspay-bf/internal/models"
 	"masspay-bf/internal/services"
-
-	"github.com/redis/go-redis/v9"
 )
 
 // ── Slug helpers ─────────────────────────────────────────────────
@@ -72,10 +73,11 @@ func uniqueSlug(db *gorm.DB, raison string) string {
 type AuthHandler struct {
 	db  *gorm.DB
 	cfg *config.Config
+	rdb *redis.Client
 }
 
-func NewAuthHandler(db *gorm.DB, cfg *config.Config) *AuthHandler {
-	return &AuthHandler{db: db, cfg: cfg}
+func NewAuthHandler(db *gorm.DB, cfg *config.Config, rdb *redis.Client) *AuthHandler {
+	return &AuthHandler{db: db, cfg: cfg, rdb: rdb}
 }
 
 type loginRequest struct {
@@ -150,12 +152,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		"refresh_token": rawRefresh,
 		"expires_in":    h.cfg.JWTExpiryHours * 3600,
 		"user": gin.H{
-			"id":          user.ID,
-			"email":       user.Email,
-			"full_name":   user.FullName(),
-			"role":        user.Role,
-			"tenant_id":   user.TenantID,
-			"tenant_name": tenantName,
+			"id":           user.ID,
+			"email":        user.Email,
+			"full_name":    user.FullName(),
+			"role":         user.Role,
+			"tenant_id":    user.TenantID,
+			"tenant_name":  tenantName,
+			"totp_enabled": user.TOTPEnabled,
 		},
 	})
 }
@@ -193,7 +196,10 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 
 	// Révoquer l'ancien refresh token (rotation)
 	now := time.Now()
-	h.db.Model(stored).Update("revoked_at", now)
+	if err := h.db.Model(stored).Update("revoked_at", now).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "révocation refresh token échouée"})
+		return
+	}
 
 	// Charger l'utilisateur
 	var user models.User
@@ -228,7 +234,10 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		UserAgent: c.GetHeader("User-Agent"),
 		IPAddress: c.ClientIP(),
 	}
-	h.db.Create(&newRefresh)
+	if err := h.db.Create(&newRefresh).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "sauvegarde refresh token échouée"})
+		return
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"access_token":  accessToken,
@@ -248,15 +257,15 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 		return
 	}
 
-	// Révoquer tous les refresh tokens de l'utilisateur (invalide toutes les sessions)
 	userID := middleware.GetCallerID(c)
 	now := time.Now()
+
+	// Révoquer tous les refresh tokens de l'utilisateur
 	result := h.db.Model(&models.RefreshToken{}).
 		Where("user_id = ? AND revoked_at IS NULL", userID).
 		Update("revoked_at", now)
 
 	if result.RowsAffected == 0 {
-		// Chercher le token spécifique si aucun n'a été matché par user_id
 		var tokens []models.RefreshToken
 		h.db.Where("revoked_at IS NULL AND expires_at > ?", time.Now()).Find(&tokens)
 		for _, t := range tokens {
@@ -264,6 +273,13 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 				h.db.Model(&t).Update("revoked_at", now)
 				break
 			}
+		}
+	}
+
+	// Blacklister le JWT d'accès courant pour révocation immédiate
+	if h.rdb != nil {
+		if claims := middleware.GetCurrentClaims(c); claims != nil && claims.ExpiresAt != nil {
+			middleware.BlacklistToken(context.Background(), h.rdb, claims.ID, claims.ExpiresAt.Time)
 		}
 	}
 
@@ -282,6 +298,114 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"user": user})
+}
+
+// ── 2FA TOTP ─────────────────────────────────────────────────────
+
+// Setup2FA génère un nouveau secret TOTP et retourne l'URI otpauth:// pour le QR code.
+// Le 2FA n'est PAS encore activé — il faut confirmer avec un premier code valide.
+func (h *AuthHandler) Setup2FA(c *gin.Context) {
+	userID := middleware.GetCallerID(c)
+
+	secret, err := crypto.NewTOTPSecret()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "génération secret 2FA échouée"})
+		return
+	}
+
+	var user models.User
+	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "utilisateur introuvable"})
+		return
+	}
+	if user.TOTPEnabled {
+		c.JSON(http.StatusConflict, gin.H{"error": "2FA déjà activé — désactivez-le avant de générer un nouveau secret"})
+		return
+	}
+
+	storedSecret := crypto.EncryptField(secret)
+	if err := h.db.Model(&user).Updates(map[string]interface{}{
+		"totp_secret":  storedSecret,
+		"totp_enabled": false,
+	}).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "sauvegarde secret échouée"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"secret": secret,
+		"qr_uri": crypto.TOTPKeyURI("MynaPay", user.Email, secret),
+		"note":   "Scannez le QR code avec Google Authenticator ou Authy, puis confirmez via POST /auth/2fa/confirm",
+	})
+}
+
+// Confirm2FA active le 2FA après vérification d'un premier code valide.
+func (h *AuthHandler) Confirm2FA(c *gin.Context) {
+	userID := middleware.GetCallerID(c)
+
+	var req struct {
+		Code string `json:"code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "code requis"})
+		return
+	}
+	req.Code = strings.TrimSpace(req.Code)
+
+	var user models.User
+	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "utilisateur introuvable"})
+		return
+	}
+	if user.TOTPSecret == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "lancez d'abord la configuration 2FA via POST /auth/2fa/setup"})
+		return
+	}
+
+	secret := crypto.DecryptField(user.TOTPSecret)
+	if !crypto.ValidateTOTP(secret, req.Code) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "code 2FA invalide"})
+		return
+	}
+
+	h.db.Model(&user).Update("totp_enabled", true)
+	c.JSON(http.StatusOK, gin.H{"message": "2FA activé avec succès"})
+}
+
+// Disable2FA désactive le 2FA après vérification d'un code valide.
+func (h *AuthHandler) Disable2FA(c *gin.Context) {
+	userID := middleware.GetCallerID(c)
+
+	var req struct {
+		Code string `json:"code" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "code 2FA requis pour désactiver"})
+		return
+	}
+	req.Code = strings.TrimSpace(req.Code)
+
+	var user models.User
+	if err := h.db.First(&user, "id = ?", userID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "utilisateur introuvable"})
+		return
+	}
+	if !user.TOTPEnabled {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "2FA non activé"})
+		return
+	}
+
+	secret := crypto.DecryptField(user.TOTPSecret)
+	if !crypto.ValidateTOTP(secret, req.Code) {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "code 2FA invalide"})
+		return
+	}
+
+	h.db.Model(&user).Updates(map[string]interface{}{
+		"totp_secret":  "",
+		"totp_enabled": false,
+	})
+	c.JSON(http.StatusOK, gin.H{"message": "2FA désactivé"})
 }
 
 // ── Super Admin ───────────────────────────────────────────────────
@@ -668,7 +792,18 @@ func (h *TenantHandler) ListBeneficiaries(c *gin.Context) {
 
 	q := h.db.Model(&models.Beneficiary{}).Where("tenant_id = ? AND deleted_at IS NULL", tenant.ID)
 	if search != "" {
-		q = q.Where("full_name ILIKE ? OR phone_number LIKE ?", "%"+search+"%", "%"+search+"%")
+		search = strings.TrimSpace(search)
+		phone := models.NormalizePhone(search)
+		if phone != "" {
+			q = q.Where(
+				"full_name ILIKE ? OR phone_number LIKE ? OR phone_hash = ?",
+				"%"+search+"%",
+				"%"+phone+"%",
+				crypto.HashField(phone),
+			)
+		} else {
+			q = q.Where("full_name ILIKE ?", "%"+search+"%")
+		}
 	}
 	q.Count(&total)
 	q.Order("full_name ASC").Offset((page - 1) * size).Limit(size).Find(&benefs)
@@ -989,10 +1124,21 @@ func (h *AdminHandler) UpdateTenant(c *gin.Context) {
 		updates["raison_sociale"] = *req.RaisonSociale
 	}
 	if req.RCCM != nil {
-		updates["rccm"] = *req.RCCM
+		rccm := strings.TrimSpace(*req.RCCM)
+		if rccm == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "rccm ne peut pas être vide"})
+			return
+		}
+		updates["rccm"] = crypto.EncryptField(rccm)
 	}
 	if req.IFU != nil {
-		updates["ifu"] = *req.IFU
+		ifu := strings.TrimSpace(*req.IFU)
+		if ifu == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "ifu ne peut pas être vide"})
+			return
+		}
+		updates["ifu"] = crypto.EncryptField(ifu)
+		updates["ifu_hash"] = crypto.HashField(ifu)
 	}
 	if req.Secteur != nil {
 		updates["secteur"] = *req.Secteur
@@ -1012,6 +1158,14 @@ func (h *AdminHandler) UpdateTenant(c *gin.Context) {
 	}
 
 	result := h.db.Model(&models.Tenant{}).Where("id = ?", tenantID).Updates(updates)
+	if result.Error != nil {
+		if isDuplicate(result.Error) {
+			c.JSON(http.StatusConflict, gin.H{"error": "slug ou IFU déjà utilisé"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": result.Error.Error()})
+		return
+	}
 	if result.RowsAffected == 0 {
 		c.JSON(http.StatusNotFound, gin.H{"error": "tenant introuvable"})
 		return

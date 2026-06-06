@@ -27,8 +27,17 @@ type Config struct {
 	SuperAdminFirstName string
 	SuperAdminLastName  string
 
-	RateLimitEnabled bool
-	RateLimitPerMin  int // requêtes par minute par IP
+	RateLimitEnabled         bool
+	RateLimitPerMin          int // requêtes par minute par IP (global, par IP)
+	RateLimitLoginPerMin     int // tentatives de login par IP (défaut 10)
+	RateLimitFinancialPerMin int // actions financières par tenant (défaut 5)
+
+	// Chiffrement AES-256-GCM des champs sensibles (IFU, RCCM, téléphone)
+	// Format : 64 caractères hexadécimaux — générer avec : openssl rand -hex 32
+	FieldEncryptionKey string
+
+	// 2FA TOTP obligatoire pour les actions financières (execute batch, recharge)
+	TOTPRequired bool
 
 	// Orange Money BF — Online Payment API (XML-RPC)
 	// Réf. : "Orange Money online payment technical specification document"
@@ -108,8 +117,13 @@ func Load() *Config {
 		SuperAdminFirstName: getEnv("SUPER_ADMIN_FIRST_NAME", "Super"),
 		SuperAdminLastName:  getEnv("SUPER_ADMIN_LAST_NAME", "Admin"),
 
-		RateLimitEnabled: getEnv("RATE_LIMIT_ENABLED", "true") == "true",
-		RateLimitPerMin:  getEnvInt("RATE_LIMIT_PER_MIN", 60),
+		RateLimitEnabled:         getEnv("RATE_LIMIT_ENABLED", "true") == "true",
+		RateLimitPerMin:          getEnvInt("RATE_LIMIT_PER_MIN", 60),
+		RateLimitLoginPerMin:     getEnvInt("RATE_LIMIT_LOGIN_PER_MIN", 10),
+		RateLimitFinancialPerMin: getEnvInt("RATE_LIMIT_FINANCIAL_PER_MIN", 5),
+
+		FieldEncryptionKey: getEnv("FIELD_ENCRYPTION_KEY", ""),
+		TOTPRequired:       getEnvBool("TOTP_REQUIRED", false),
 
 		OrangeEnv:               getEnv("ORANGE_MONEY_ENV", "test"),
 		OrangeTestURL:           getEnv("ORANGE_MONEY_TEST_URL", "https://testom.orange.bf/"),
