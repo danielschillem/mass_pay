@@ -37,6 +37,7 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [notifs, setNotifs] = useState<Notif[]>([]);
+  const topbarRef = useRef<HTMLElement>(null);
   const ref = useRef<HTMLDivElement>(null);
 
   const isAdmin = mode === "admin";
@@ -50,6 +51,27 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
     };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  useEffect(() => {
+    const topbar = topbarRef.current;
+    if (!topbar) return;
+
+    const syncTopbarHeight = () => {
+      const height = Math.ceil(topbar.getBoundingClientRect().height);
+      document.documentElement.style.setProperty("--app-topbar-height", `${height}px`);
+    };
+
+    syncTopbarHeight();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(syncTopbarHeight) : null;
+    observer?.observe(topbar);
+    window.addEventListener("resize", syncTopbarHeight);
+
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener("resize", syncTopbarHeight);
+      document.documentElement.style.removeProperty("--app-topbar-height");
+    };
   }, []);
 
   useEffect(() => {
@@ -100,7 +122,7 @@ export function TopBar({ mode, tenantName, userName, userRole }: TopBarProps) {
   }, [isAdmin]);
 
   return (
-    <header className="app-topbar">
+    <header ref={topbarRef} className="app-topbar">
       <div className="app-topbar-logo">
         <LogoMark />
       </div>
