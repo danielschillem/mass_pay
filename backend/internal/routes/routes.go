@@ -12,9 +12,10 @@ import (
 	"masspay-bf/internal/mail"
 	"masspay-bf/internal/middleware"
 	"masspay-bf/internal/models"
+	"masspay-bf/internal/notifications"
 )
 
-func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers.WorkerStatusFunc) *gin.Engine {
+func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers.WorkerStatusFunc, notifier *notifications.Notifier) *gin.Engine {
 	gin.SetMode(cfg.GinMode)
 
 	r := gin.New()
@@ -49,7 +50,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 	r.GET("/health", monitoring.Health)
 
 	authH := handlers.NewAuthHandler(db, cfg, rdb)
-	adminH := handlers.NewAdminHandler(db, cfg)
+	adminH := handlers.NewAdminHandler(db, cfg, notifier)
 	tenantH := handlers.NewTenantHandler(db, rdb, cfg)
 	mailH := handlers.NewMailHandler(mail.NewSender(cfg))
 

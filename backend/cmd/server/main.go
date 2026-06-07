@@ -6,6 +6,8 @@ import (
 	"masspay-bf/internal/config"
 	"masspay-bf/internal/crypto"
 	"masspay-bf/internal/database"
+	"masspay-bf/internal/mail"
+	"masspay-bf/internal/notifications"
 	"masspay-bf/internal/routes"
 	"masspay-bf/internal/workers"
 
@@ -57,11 +59,14 @@ func main() {
 	}
 	database.SeedSuperAdmin(db, cfg, log)
 
+	// Notifier email transactionnel
+	notifier := notifications.New(mail.NewSender(cfg), db, log)
+
 	// Worker de virement — goroutine dédiée
-	workerStatus := workers.Start(db, rdb, cfg, log)
+	workerStatus := workers.Start(db, rdb, cfg, log, notifier)
 
 	// Serveur HTTP
-	r := routes.Setup(db, rdb, cfg, workerStatus)
+	r := routes.Setup(db, rdb, cfg, workerStatus, notifier)
 
 	log.WithField("port", cfg.Port).Info("serveur HTTP démarré")
 	if err := r.Run(":" + cfg.Port); err != nil {

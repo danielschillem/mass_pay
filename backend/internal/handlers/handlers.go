@@ -28,6 +28,7 @@ import (
 	mailservice "masspay-bf/internal/mail"
 	"masspay-bf/internal/middleware"
 	"masspay-bf/internal/models"
+	"masspay-bf/internal/notifications"
 	"masspay-bf/internal/services"
 )
 
@@ -481,12 +482,13 @@ func (h *MailHandler) SendTest(c *gin.Context) {
 // ── Super Admin ───────────────────────────────────────────────────
 
 type AdminHandler struct {
-	db  *gorm.DB
-	cfg *config.Config
+	db       *gorm.DB
+	cfg      *config.Config
+	notifier *notifications.Notifier
 }
 
-func NewAdminHandler(db *gorm.DB, cfg *config.Config) *AdminHandler {
-	return &AdminHandler{db: db, cfg: cfg}
+func NewAdminHandler(db *gorm.DB, cfg *config.Config, notifier *notifications.Notifier) *AdminHandler {
+	return &AdminHandler{db: db, cfg: cfg, notifier: notifier}
 }
 
 // ListTenants retourne tous les tenants avec pagination.
@@ -614,6 +616,12 @@ func (h *AdminHandler) ActivateTenant(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "tenant introuvable"})
 		return
 	}
+	if h.notifier != nil {
+		var tenant models.Tenant
+		if h.db.First(&tenant, "id = ?", tenantID).Error == nil {
+			go h.notifier.TenantActivated(c.Request.Context(), &tenant)
+		}
+	}
 	c.JSON(http.StatusOK, gin.H{"message": "tenant activé"})
 }
 
@@ -656,6 +664,9 @@ func (h *AdminHandler) RechargeWallet(c *gin.Context) {
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
+	}
+	if h.notifier != nil {
+		go h.notifier.WalletRecharged(c.Request.Context(), tenantID, req.Amount, reference, wallet.AvailableBalance)
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"message":   "wallet rechargé",
@@ -1481,6 +1492,10 @@ func (h *AdminHandler) RejectKYB(c *gin.Context) {
 		Comment:   req.Reason,
 		CreatedBy: callerID,
 	})
+
+	if h.notifier != nil {
+		go h.notifier.TenantKYBRejected(c.Request.Context(), &tenant, req.Reason)
+	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "KYB rejeté, tenant repassé en prospect"})
 }

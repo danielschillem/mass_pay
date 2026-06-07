@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/redis/go-redis/v9"
 	"github.com/sirupsen/logrus"
 	"gorm.io/gorm"
@@ -17,12 +18,13 @@ import (
 	"masspay-bf/internal/gateway"
 	"masspay-bf/internal/handlers"
 	"masspay-bf/internal/models"
+	"masspay-bf/internal/notifications"
 	"masspay-bf/internal/services"
 )
 
 // Start lance le worker pool et le scheduler de retry.
 // Retourne une fonction de statut pour le monitoring.
-func Start(db *gorm.DB, rdb *redis.Client, cfg *config.Config, log *logrus.Logger) handlers.WorkerStatusFunc {
+func Start(db *gorm.DB, rdb *redis.Client, cfg *config.Config, log *logrus.Logger, notifier *notifications.Notifier) handlers.WorkerStatusFunc {
 	ws := services.NewWalletService(db)
 	bs := services.NewBatchService(db, rdb)
 
@@ -39,6 +41,7 @@ func Start(db *gorm.DB, rdb *redis.Client, cfg *config.Config, log *logrus.Logge
 		log:       log,
 		ws:        ws,
 		bs:        bs,
+		notifier:  notifier,
 		processed: &processed,
 		failed:    &failed,
 		success:   &success,
@@ -81,12 +84,14 @@ func Start(db *gorm.DB, rdb *redis.Client, cfg *config.Config, log *logrus.Logge
 }
 
 type worker struct {
-	db        *gorm.DB
-	rdb       *redis.Client
-	cfg       *config.Config
-	log       *logrus.Logger
-	ws        *services.WalletService
-	bs        *services.BatchService
+	db       *gorm.DB
+	rdb      *redis.Client
+	cfg      *config.Config
+	log      *logrus.Logger
+	ws       *services.WalletService
+	bs       *services.BatchService
+	notifier *notifications.Notifier
+
 	processed *atomic.Int64
 	failed    *atomic.Int64
 	success   *atomic.Int64
@@ -163,7 +168,11 @@ func (w *worker) process(ctx context.Context, job services.DisbursementJob) erro
 			if err := w.bs.FinishItem(job.BatchItemID, true, job.OperatorRef, ""); err != nil {
 				return err
 			}
-			return w.ws.SettleItem(job.TenantID, job.Amount, job.CommissionAmount, job.BatchItemID, job.BatchID, true)
+			if err := w.ws.SettleItem(job.TenantID, job.Amount, job.CommissionAmount, job.BatchItemID, job.BatchID, true); err != nil {
+				return err
+			}
+			w.notifyIfBatchDone(ctx, job.BatchID)
+			return nil
 		case "pending":
 			if job.Attempt < w.cfg.MaxRetries-1 {
 				reason := fmt.Sprintf("status opérateur: pending — %s", resp.Message)
@@ -197,7 +206,24 @@ func (w *worker) process(ctx context.Context, job services.DisbursementJob) erro
 	if err := w.bs.FinishItem(job.BatchItemID, false, "", errMsg); err != nil {
 		return err
 	}
-	return w.ws.SettleItem(job.TenantID, job.Amount, job.CommissionAmount, job.BatchItemID, job.BatchID, false)
+	if err := w.ws.SettleItem(job.TenantID, job.Amount, job.CommissionAmount, job.BatchItemID, job.BatchID, false); err != nil {
+		return err
+	}
+	w.notifyIfBatchDone(ctx, job.BatchID)
+	return nil
+}
+
+func (w *worker) notifyIfBatchDone(ctx context.Context, batchID uuid.UUID) {
+	if w.notifier == nil {
+		return
+	}
+	var batch models.Batch
+	if err := w.db.First(&batch, "id = ?", batchID).Error; err != nil {
+		return
+	}
+	if batch.Status == models.BatchStatusCompleted || batch.Status == models.BatchStatusFailed {
+		w.notifier.BatchCompleted(ctx, &batch)
+	}
 }
 
 func (w *worker) scheduleRetry(ctx context.Context, job services.DisbursementJob, reason string) error {
