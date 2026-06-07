@@ -21,12 +21,8 @@ export default function HomePage() {
   }, [router]);
 
   return (
-    <div style={{ background: "var(--bg)", minHeight: "100vh", display: "flex",
-      alignItems: "center", justifyContent: "center" }}>
-      <div style={{ width: 32, height: 32, border: "3px solid var(--gold)",
-        borderTopColor: "transparent", borderRadius: "50%",
-        animation: "spin 0.8s linear infinite" }} />
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <div className="spinner" />
     </div>
   );
 }

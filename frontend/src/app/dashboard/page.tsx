@@ -91,7 +91,7 @@ export default function TenantDashboard() {
       </div>
 
       {/* Wallet card */}
-      <div className="data-card" style={{ background:"linear-gradient(180deg,#fff,var(--elevated))",
+      <div className="data-card" style={{ background:"var(--card)",
         border:"1px solid var(--border)", borderRadius:8, padding:22,
         marginBottom:22, boxShadow:"var(--shadow-xs)" }}>
         <div className="mobile-stack" style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start",

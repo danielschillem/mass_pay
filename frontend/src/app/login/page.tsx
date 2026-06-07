@@ -1,9 +1,19 @@
 "use client";
 
 import { useState } from "react";
+import type { FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, Layers } from "lucide-react";
+import {
+  AlertTriangle,
+  ArrowRight,
+  Eye,
+  EyeOff,
+  Lock,
+  Mail,
+  ShieldCheck,
+} from "lucide-react";
 import { api, auth } from "@/lib/api";
+import { LogoMark } from "@/components/layout/Sidebar";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,7 +23,8 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async () => {
+  const handleLogin = async (event?: FormEvent<HTMLFormElement>) => {
+    event?.preventDefault();
     if (!email || !password) return;
     setLoading(true);
     setError("");
@@ -35,132 +46,93 @@ export default function LoginPage() {
   const disabled = loading || !email || !password;
 
   return (
-    <div className="login-shell" style={{ minHeight:"100vh", display:"flex", alignItems:"center",
-      justifyContent:"center", padding:24, fontFamily:"'DM Sans',sans-serif",
-      background:"linear-gradient(180deg,#F8FAFC 0%, var(--app-bg) 100%)" }}>
-      <div className="login-grid" style={{ width:"100%", maxWidth:980, display:"grid",
-        gridTemplateColumns:"minmax(320px, 420px) minmax(320px, 1fr)",
-        gap:28, alignItems:"stretch" }}>
-        <section className="login-card" style={{ background:"var(--card)", border:"1px solid var(--border)",
-          borderRadius:8, padding:32, boxShadow:"var(--shadow)" }}>
-          <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:36 }}>
-            <div style={{ width:42, height:42, background:"var(--gold)", borderRadius:8,
-              display:"flex", alignItems:"center", justifyContent:"center",
-              boxShadow:"0 12px 26px rgba(183,121,31,.20)" }}>
-              <Layers size={21} color="#fff" />
+    <main className="login-shell">
+      <div className="login-grid">
+        <section className="login-card" aria-label="Connexion MynaPay">
+          <div className="login-form-header">
+            <LogoMark />
+            <div className="login-security-chip">
+              <ShieldCheck size={14} />
+              Session TLS
             </div>
-            <span style={{ fontFamily:"'Sora',sans-serif", fontWeight:800,
-              fontSize:22, color:"var(--text)" }}>
-              MynaPay <span style={{ color:"var(--gold)" }}>BF</span>
-            </span>
           </div>
 
-          <h1 style={{ fontFamily:"'Sora',sans-serif", fontSize:22,
-            fontWeight:800, color:"var(--text)", margin:"0 0 6px" }}>
-            Connexion
-          </h1>
-          <p style={{ color:"var(--sub)", fontSize:13, margin:"0 0 24px" }}>
-            Plateforme de virement en masse
+          <h1 className="login-title">Connexion sécurisée</h1>
+          <p className="login-copy">
+            Accédez à votre console de virements, wallet et dossiers KYB avec votre compte MynaPay BF.
           </p>
 
           {error && (
-            <div style={{ background:"var(--red-sub)", border:"1px solid var(--red-border)",
-              borderRadius:8, padding:"11px 14px", marginBottom:16,
-              color:"var(--red)", fontSize:13, fontWeight:600 }}>
-              {error}
+            <div className="login-error">
+              <AlertTriangle size={16} />
+              <span>{error}</span>
             </div>
           )}
 
-          <div style={{ marginBottom:16 }}>
-            <label style={{ color:"var(--mid)", fontSize:11, fontWeight:800,
-              textTransform:"uppercase", letterSpacing:".5px", display:"block", marginBottom:7 }}>
-              Adresse email
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleLogin()}
-              placeholder="admin@entreprise.bf"
-              style={{ width:"100%", background:"var(--elevated)",
-                border:"1px solid var(--border)", borderRadius:8,
-                padding:"12px 14px", color:"var(--text)", fontSize:14,
-                outline:"none", boxSizing:"border-box" }}
-            />
-          </div>
-
-          <div style={{ marginBottom:24, position:"relative" }}>
-            <label style={{ color:"var(--mid)", fontSize:11, fontWeight:800,
-              textTransform:"uppercase", letterSpacing:".5px", display:"block", marginBottom:7 }}>
-              Mot de passe
-            </label>
-            <input
-              type={showPwd ? "text" : "password"}
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              onKeyDown={e => e.key === "Enter" && handleLogin()}
-              placeholder="********"
-              style={{ width:"100%", background:"var(--elevated)",
-                border:"1px solid var(--border)", borderRadius:8,
-                padding:"12px 42px 12px 14px", color:"var(--text)", fontSize:14,
-                outline:"none", boxSizing:"border-box" }}
-            />
-            <button type="button" onClick={() => setShowPwd(!showPwd)}
-              style={{ position:"absolute", right:12, top:35, background:"transparent",
-                border:"none", cursor:"pointer", padding:0, color:"var(--sub)" }}>
-              {showPwd ? <EyeOff size={17} /> : <Eye size={17} />}
-            </button>
-          </div>
-
-          <button type="button" onClick={handleLogin} disabled={disabled}
-            style={{ width:"100%", background: disabled ? "var(--elevated)" : "var(--gold)",
-              color: disabled ? "var(--sub)" : "#fff", border:"none",
-              padding:"13px", borderRadius:8, fontWeight:800, fontSize:15,
-              cursor: disabled ? "not-allowed" : "pointer",
-              fontFamily:"'Sora',sans-serif",
-              boxShadow: disabled ? "none" : "0 12px 28px rgba(183,121,31,.20)" }}>
-            {loading ? "Connexion..." : "Se connecter"}
-          </button>
-        </section>
-
-        <section className="login-side" style={{ border:"1px solid var(--border)", borderRadius:8,
-          background:"var(--surf)",
-          boxShadow:"var(--shadow)", padding:32, display:"flex",
-          flexDirection:"column", justifyContent:"space-between", minHeight:420 }}>
-          <div>
-            <div style={{ color:"var(--gold)", fontSize:12, fontWeight:800,
-              textTransform:"uppercase", letterSpacing:".6px", marginBottom:14 }}>
-              Console de paiement
+          <form onSubmit={handleLogin}>
+            <div className="field">
+              <label className="field-label" htmlFor="email">
+                <Mail size={13} />
+                Adresse email
+              </label>
+              <input
+                id="email"
+                className="field-control"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@entreprise.bf"
+                autoComplete="email"
+              />
             </div>
-            <h2 style={{ color:"var(--text)", fontFamily:"'Sora',sans-serif",
-              fontSize:32, lineHeight:1.12, margin:"0 0 14px", maxWidth:430 }}>
-              Pilotez vos virements de masse avec une interface claire.
-            </h2>
-            <p style={{ color:"var(--mid)", fontSize:15, lineHeight:1.7,
-              margin:0, maxWidth:470 }}>
-              Suivi KYB, provisions wallet, batchs, bénéficiaires et validations sont regroupés dans un espace pensé pour l'exécution quotidienne.
-            </p>
-          </div>
 
-          <div className="login-feature-grid" style={{ display:"grid", gridTemplateColumns:"repeat(3, 1fr)",
-            gap:12, marginTop:28 }}>
-            {["KYB", "Wallet", "Batchs"].map(label => (
-              <div key={label} style={{ background:"var(--card)",
-                border:"1px solid var(--border)", borderRadius:8,
-                padding:"14px 12px", boxShadow:"var(--shadow-sm)" }}>
-                <div style={{ color:"var(--sub)", fontSize:11, fontWeight:800,
-                  textTransform:"uppercase", letterSpacing:".5px" }}>
-                  {label}
-                </div>
-                <div style={{ color:"var(--text)", fontSize:13,
-                  fontWeight:800, marginTop:6 }}>
-                  Opérationnel
-                </div>
+            <div className="field">
+              <label className="field-label" htmlFor="password">
+                <Lock size={13} />
+                Mot de passe
+              </label>
+              <div className="field-wrap">
+                <input
+                  id="password"
+                  className="field-control has-action"
+                  type={showPwd ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="********"
+                  autoComplete="current-password"
+                />
+                <button
+                  type="button"
+                  className="password-toggle"
+                  onClick={() => setShowPwd(!showPwd)}
+                  aria-label={showPwd ? "Masquer le mot de passe" : "Afficher le mot de passe"}
+                  title={showPwd ? "Masquer" : "Afficher"}
+                >
+                  {showPwd ? <EyeOff size={17} /> : <Eye size={17} />}
+                </button>
               </div>
-            ))}
+            </div>
+
+            <div className="login-options">
+              <label>
+                <input type="checkbox" />
+                Terminal reconnu
+              </label>
+              <span>Accès entreprise</span>
+            </div>
+
+            <button type="submit" className="login-submit" disabled={disabled}>
+              {loading ? "Vérification..." : "Entrer dans la console"}
+              {!loading && <ArrowRight size={16} />}
+            </button>
+          </form>
+
+          <div className="login-footnote">
+            Les accès super admin et entreprise sont redirigés automatiquement vers leur espace de travail.
           </div>
         </section>
+
       </div>
-    </div>
+    </main>
   );
 }
