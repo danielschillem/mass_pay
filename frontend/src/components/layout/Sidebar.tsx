@@ -12,7 +12,9 @@ import {
   Layers,
   LayoutDashboard,
   LogOut,
+  Mail,
   Send,
+  Settings,
   Shield,
   UserCog,
   Users,
@@ -22,20 +24,25 @@ import { auth } from "@/lib/api";
 
 type NavItem = { href: Route; icon: ElementType; label: string };
 
+const r = (p: string) => p as Route;
+
 const SA_NAV: NavItem[] = [
-  { href: "/admin", icon: LayoutDashboard, label: "Vue globale" },
-  { href: "/admin/tenants", icon: Building2, label: "Tenants" },
-  { href: "/admin/kyb", icon: Shield, label: "KYB · Onboarding" },
-  { href: "/admin/admins", icon: UserCog, label: "Administrateurs" },
+  { href: "/admin",           icon: LayoutDashboard, label: "Vue globale" },
+  { href: "/admin/tenants",   icon: Building2,        label: "Tenants" },
+  { href: "/admin/kyb",       icon: Shield,           label: "KYB · Onboarding" },
+  { href: "/admin/admins",    icon: UserCog,          label: "Administrateurs" },
+  { href: r("/admin/mail"),   icon: Mail,             label: "Service Mail" },
+  { href: r("/admin/settings"), icon: Settings,       label: "Paramètres" },
 ];
 
 const TENANT_NAV: NavItem[] = [
-  { href: "/dashboard", icon: LayoutDashboard, label: "Tableau de bord" },
-  { href: "/dashboard/batches/new", icon: Send, label: "Nouveau batch" },
-  { href: "/dashboard/batches", icon: FileText, label: "Historique" },
-  { href: "/dashboard/beneficiaries", icon: Users, label: "Bénéficiaires" },
-  { href: "/dashboard/wallet", icon: Wallet, label: "Wallet" },
-  { href: "/dashboard/users", icon: UserCog, label: "Mon équipe" },
+  { href: "/dashboard",                   icon: LayoutDashboard, label: "Tableau de bord" },
+  { href: "/dashboard/batches/new",       icon: Send,            label: "Nouveau batch" },
+  { href: "/dashboard/batches",           icon: FileText,        label: "Historique" },
+  { href: "/dashboard/beneficiaries",     icon: Users,           label: "Bénéficiaires" },
+  { href: "/dashboard/wallet",            icon: Wallet,          label: "Wallet" },
+  { href: "/dashboard/users",             icon: UserCog,         label: "Mon équipe" },
+  { href: r("/dashboard/settings"),       icon: Settings,        label: "Paramètres" },
 ];
 
 export function Sidebar({ mode }: { mode: "admin" | "tenant" }) {
@@ -49,6 +56,7 @@ export function Sidebar({ mode }: { mode: "admin" | "tenant" }) {
     localStorage.removeItem("masspay_role");
     localStorage.removeItem("masspay_user");
     localStorage.removeItem("masspay_tenant_name");
+    localStorage.removeItem("masspay_tenant_status");
     router.push("/login");
   };
 

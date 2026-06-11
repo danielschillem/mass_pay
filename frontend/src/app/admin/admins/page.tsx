@@ -19,7 +19,7 @@ export default function AdminUsersPage() {
     setLoading(true);
     api.admin.adminUsers()
       .then(r => setUsers(r.data))
-      .catch(console.error)
+      .catch((e: unknown) => flash(e instanceof Error ? e.message : "Erreur de chargement"))
       .finally(() => setLoading(false));
   };
 

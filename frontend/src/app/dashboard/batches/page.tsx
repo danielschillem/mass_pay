@@ -77,10 +77,14 @@ export default function BatchHistoryPage() {
   const pageSize = 15;
 
   const load = (p: number, status: string) => {
+    void status;
     setLoading(true);
     api.tenant.batches(p, pageSize)
       .then(r => { setBatches(r.data); setTotal(r.total); })
-      .catch(console.error)
+      .catch((e: unknown) => {
+        setMsg(e instanceof Error ? e.message : "Erreur de chargement des batchs");
+        setTimeout(() => setMsg(""), 4000);
+      })
       .finally(() => setLoading(false));
   };
 

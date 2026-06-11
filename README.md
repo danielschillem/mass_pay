@@ -67,6 +67,59 @@ docker-compose up -d --build --force-recreate backend frontend
 
 ---
 
+## Déploiement en ligne
+
+La production officielle MynaPay est le VPS Hostinger KVM2 `187.127.233.228`, exposee via `https://pay.myna-etoile.com`.
+Le runbook complet est dans `deploy/hostinger/PRODUCTION.md`.
+
+Le déploiement production utilise le compose de base plus l'override prod. PostgreSQL, Redis, le backend et le frontend restent liés à `127.0.0.1`; nginx expose seul les ports `80` et `443`.
+
+```bash
+cp .env.prod.example .env.prod
+# Renseigner les secrets, Orange Money et les chemins de certificats
+docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml config --quiet
+docker compose --env-file .env.prod -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+Sur le VPS Hostinger, utiliser plutot :
+
+```bash
+cd /opt/mynapay/app
+bash deploy/hostinger/deploy-platform.sh
+curl -fsS https://pay.myna-etoile.com/health
+```
+
+Pour Orange Money BF en production, `ORANGE_MONEY_CERTS_DIR` doit pointer vers un dossier hors Git contenant exactement :
+
+```text
+star_orange_bf.pem
+OrangeBFV22026.key
+pin_public_key.pem
+```
+
+Le flux Orange actif est `CASHIN` :
+
+```text
+MynaPay -> GET API TOKEN
+MynaPay -> POST CASHIN
+Orange débite le compte Agent/Alias MynaPay
+Orange crédite le MSISDN bénéficiaire
+MynaPay règle le wallet interne selon le résultat opérateur
+```
+
+Les URLs `ORANGE_MONEY_CASHIN_TOKEN_URL` et `ORANGE_MONEY_CASHIN_URL` sont indiquées `To be defined` dans la documentation CASHIN : elles doivent être confirmées par OMBF avant tout test réel.
+
+Le test Orange est volontairement non transactionnel par défaut :
+
+```bash
+cd backend
+go run ./cmd/test_orange
+# Test réel explicite, montant minimal
+go run ./cmd/test_orange --send --phone <MSISDN> --amount 1
+```
+
+---
+
 ## Démarrage manuel
 
 ### Backend
@@ -165,13 +218,25 @@ DELETE /api/v1/tenant/beneficiaries/:id
 
 ```env
 JWT_SECRET=         # min 32 caractères — OBLIGATOIRE
-DATABASE_URL=       # PostgreSQL DSN
-REDIS_URL=          # Redis URL
+FIELD_ENCRYPTION_KEY= # 64 caractères hex — obligatoire en production
+DB_PASSWORD=        # mot de passe PostgreSQL Docker
+REDIS_PASSWORD=     # mot de passe Redis Docker
 SEED_SUPER_ADMIN=   # true en dev Docker, false recommandé en production
 SUPER_ADMIN_EMAIL=
 SUPER_ADMIN_PASSWORD=
-ORANGE_API_KEY=     # Clé API Orange Money BF
-MOOV_API_KEY=       # Clé API Moov Africa BF
+ORANGE_MONEY_ENV=production
+ORANGE_MONEY_MERCHANT_MSISDN=
+ORANGE_MONEY_API_USERNAME=
+ORANGE_MONEY_API_PASSWORD=
+ORANGE_MONEY_CASHIN_TOKEN_URL=
+ORANGE_MONEY_CASHIN_URL=
+ORANGE_MONEY_CASHIN_API_KEY=
+ORANGE_MONEY_AGENT_ALIAS=
+ORANGE_MONEY_AGENT_PIN=
+ORANGE_MONEY_PIN_PUBLIC_KEY=./certs/orange/pin_public_key.pem
+ORANGE_MONEY_CERTS_DIR=./certs/orange
+MOOV_USERNAME=
+MOOV_PASSWORD=
 DEFAULT_COMMISSION_RATE=0.015
 ```
 

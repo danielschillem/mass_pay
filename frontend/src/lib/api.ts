@@ -4,7 +4,7 @@ import type {
   CreateBatchRequest, PaginatedResponse,
   DashboardStats, GlobalStats,
   CreateUserRequest, UpdateUserRequest, UpdateBeneficiaryRequest,
-  KYBDocument, KYBComment, KYBHistory,
+  KYBDocument, KYBComment, KYBHistory, TenantKYBStatus,
 } from "./types";
 
 const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080/api/v1";
@@ -106,7 +106,8 @@ const post = <T>(path: string, body: unknown) =>
   req<T>(path, { method: "POST", body: JSON.stringify(body) });
 const patch = <T>(path: string, body?: unknown) =>
   req<T>(path, { method: "PATCH", body: body ? JSON.stringify(body) : undefined });
-const del  = <T>(path: string) => req<T>(path, { method: "DELETE" });
+const del  = <T>(path: string, body?: unknown) =>
+  req<T>(path, { method: "DELETE", body: body ? JSON.stringify(body) : undefined });
 
 // ── API ───────────────────────────────────────────────────────────
 
@@ -115,12 +116,20 @@ export const api = {
   // Auth
   login: (data: LoginRequest) =>
     post<LoginResponse>("/auth/login", data),
-  me: () => get<{ user: { id: string; email: string; role: string; tenant_id: string | null } }>("/auth/me"),
+  me: () => get<{ user: { id: string; email: string; full_name: string; role: string; tenant_id: string | null; tenant_status: string; totp_enabled: boolean } }>("/auth/me"),
   logout: () => post<{ message: string }>("/auth/logout", { refresh_token: auth.getRefreshToken() }),
+
+  // 2FA — accessible admin + tenant (routes /auth/2fa/*)
+  setup2FA:   () => post<{ secret: string; qr_uri: string; note: string }>("/auth/2fa/setup", {}),
+  confirm2FA: (code: string) => post<{ message: string }>("/auth/2fa/confirm", { code }),
+  disable2FA: (code: string) => del<{ message: string }>("/auth/2fa", { code }),
 
   // Super Admin
   admin: {
     stats: () => get<GlobalStats>("/admin/stats"),
+    // Mail
+    mailStatus: () => get<{ provider: string; configured: boolean }>("/admin/mail/status"),
+    mailTest: (to?: string) => post<{ message: string; provider: string }>("/admin/mail/test", { to }),
     tenants: (page = 1, size = 20, status?: string) =>
       get<PaginatedResponse<Tenant>>(`/admin/tenants?page=${page}&size=${size}${status ? `&status=${status}` : ""}`),
     getTenant:    (id: string) => get<TenantDetail>(`/admin/tenants/${id}`),
@@ -136,6 +145,16 @@ export const api = {
     // KYB
     kybDocuments: (tenantId: string) =>
       get<{ data: KYBDocument[] }>(`/admin/tenants/${tenantId}/kyb/documents`),
+    kybDocumentBlob: async (tenantId: string, docId: string): Promise<{ url: string; mimeType: string }> => {
+      const token = auth.getToken();
+      const headers: Record<string, string> = {};
+      if (token) headers["Authorization"] = `Bearer ${token}`;
+      const res = await fetch(`${BASE}/admin/tenants/${tenantId}/kyb/documents/${docId}/file`, { headers });
+      if (!res.ok) throw new Error(`Impossible de charger le document (${res.status})`);
+      const mimeType = res.headers.get("Content-Type") ?? "application/octet-stream";
+      const blob = await res.blob();
+      return { url: URL.createObjectURL(blob), mimeType };
+    },
     uploadKYBDocument: (tenantId: string, data: unknown) =>
       post<KYBDocument>(`/admin/tenants/${tenantId}/kyb/documents`, data),
     reviewKYBDocument: (tenantId: string, docId: string, status: string, reviewNote?: string) =>
@@ -194,6 +213,11 @@ export const api = {
     // Wallet transactions
     walletTransactions: (page = 1, size = 20) =>
       get<PaginatedResponse<WalletTransaction>>(`/tenant/wallet/transactions?page=${page}&size=${size}`),
+
+    // KYB self-service
+    kybStatus: () => get<TenantKYBStatus>("/tenant/kyb/status"),
+    uploadKYBDoc: (data: { type: string; file_name: string; mime_type: string; file_data: string }) =>
+      post<KYBDocument>("/tenant/kyb/documents", data),
 
     // Équipe (users)
     users:       () => get<{ data: User[]; total: number }>("/tenant/users"),

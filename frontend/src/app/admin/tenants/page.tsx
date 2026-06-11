@@ -240,7 +240,11 @@ export default function AdminTenantsPage() {
     setLoading(true);
     api.admin.tenants(1, 50)
       .then(r => { setTenants(r.data); setTotal(r.total); })
-      .catch(console.error)
+      .catch((e: unknown) => {
+        const txt = e instanceof Error ? e.message : "Erreur de chargement";
+        setActionMsg(txt);
+        setTimeout(() => setActionMsg(""), 4000);
+      })
       .finally(() => setLoading(false));
   };
 

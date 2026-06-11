@@ -1,0 +1,76 @@
+services:
+  postgres:
+    ports:
+      - "${POSTGRES_PORT_BIND:-127.0.0.1:5432}:5432"
+
+  redis:
+    ports:
+      - "${REDIS_PORT_BIND:-127.0.0.1:6379}:6379"
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ${BACKEND_IMAGE:-masspay-backend:prod}
+    environment:
+      ENV: production
+      GIN_MODE: release
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      DATABASE_URL: postgres://masspay:${DB_PASSWORD:?DB_PASSWORD requis}@postgres:5432/masspay_bf?sslmode=${POSTGRES_SSLMODE:-prefer}
+      REDIS_URL: redis://:${REDIS_PASSWORD:?REDIS_PASSWORD requis}@redis:6379
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET requis}
+      FIELD_ENCRYPTION_KEY: ${FIELD_ENCRYPTION_KEY:?FIELD_ENCRYPTION_KEY requis}
+      SEED_SUPER_ADMIN: ${SEED_SUPER_ADMIN:-false}
+      TOTP_REQUIRED: ${TOTP_REQUIRED:-true}
+      ORANGE_MONEY_ENV: production
+      ORANGE_MONEY_PROD_URL: ${ORANGE_MONEY_PROD_URL:-https://apiom.orange.bf/}
+      ORANGE_MONEY_MERCHANT_MSISDN: ${ORANGE_MONEY_MERCHANT_MSISDN:-}
+      ORANGE_MONEY_BENEFICIARY_MSISDN: ${ORANGE_MONEY_BENEFICIARY_MSISDN:-}
+      ORANGE_MONEY_USSD_MSISDN: ${ORANGE_MONEY_USSD_MSISDN:-}
+      ORANGE_MONEY_API_USERNAME: ${ORANGE_MONEY_API_USERNAME:-}
+      ORANGE_MONEY_API_PASSWORD: ${ORANGE_MONEY_API_PASSWORD:-}
+      ORANGE_MONEY_PROVIDER: ${ORANGE_MONEY_PROVIDER:-101}
+      ORANGE_MONEY_PAYID: ${ORANGE_MONEY_PAYID:-12}
+      ORANGE_MONEY_CASHIN_TOKEN_URL: ${ORANGE_MONEY_CASHIN_TOKEN_URL:-}
+      ORANGE_MONEY_CASHIN_URL: ${ORANGE_MONEY_CASHIN_URL:-}
+      ORANGE_MONEY_CASHIN_API_KEY: ${ORANGE_MONEY_CASHIN_API_KEY:-}
+      ORANGE_MONEY_CASHIN_USERNAME: ${ORANGE_MONEY_CASHIN_USERNAME:-}
+      ORANGE_MONEY_CASHIN_PASSWORD: ${ORANGE_MONEY_CASHIN_PASSWORD:-}
+      ORANGE_MONEY_AGENT_ALIAS: ${ORANGE_MONEY_AGENT_ALIAS:-}
+      ORANGE_MONEY_AGENT_PIN: ${ORANGE_MONEY_AGENT_PIN:-}
+      ORANGE_MONEY_PIN_PUBLIC_KEY: ${ORANGE_MONEY_PIN_PUBLIC_KEY_CONTAINER:-/run/secrets/orange/pin_public_key.pem}
+      ORANGE_MONEY_CERT_PUBLIC: ${ORANGE_MONEY_CERT_PUBLIC_CONTAINER:-/run/secrets/orange/star_orange_bf.pem}
+      ORANGE_MONEY_CERT_PRIVATE: ${ORANGE_MONEY_CERT_PRIVATE_CONTAINER:-/run/secrets/orange/OrangeBFV22026.key}
+    volumes:
+      - ${ORANGE_MONEY_CERTS_DIR:?ORANGE_MONEY_CERTS_DIR requis}:/run/secrets/orange:ro
+    ports:
+      - "${BACKEND_PORT_BIND:-127.0.0.1:8080}:8080"
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
+    image: ${FRONTEND_IMAGE:-masspay-frontend:prod}
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-/api/v1}
+    ports:
+      - "${FRONTEND_PORT_BIND:-127.0.0.1:3000}:3000"
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: masspay_nginx
+    restart: unless-stopped
+    depends_on:
+      frontend:
+        condition: service_started
+      backend:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/nginx/prod.conf:/etc/nginx/conf.d/default.conf:ro
+      - ${LETSENCRYPT_DIR:-/opt/mynapay/letsencrypt}:/etc/letsencrypt:ro
+      - ${CERTBOT_WWW_DIR:-/opt/mynapay/certbot-www}:/var/www/certbot:ro

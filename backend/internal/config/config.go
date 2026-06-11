@@ -39,19 +39,27 @@ type Config struct {
 	// 2FA TOTP obligatoire pour les actions financières (execute batch, recharge)
 	TOTPRequired bool
 
-	// Orange Money BF — Online Payment API (XML-RPC)
-	// Réf. : "Orange Money online payment technical specification document"
+	// Orange Money BF — CASHIN API
+	// Réf. : "Contrat d'interface API OM : CASHIN"
 	OrangeEnv               string // "test" | "production"
-	OrangeTestURL           string // https://testom.orange.bf/
-	OrangeProdURL           string // https://apiom.orange.bf/
-	OrangeMerchantMSISDN    string // MSISDN marchand MynaPay chez Orange BF
+	OrangeTestURL           string // deprecated XML-RPC test URL
+	OrangeProdURL           string // deprecated XML-RPC prod URL
+	OrangeMerchantMSISDN    string // deprecated XML-RPC merchant MSISDN
 	OrangeBeneficiaryMSISDN string // MSISDN bénéficiaire/compte Orange BF, si fourni
 	OrangeUSSDMSISDN        string // MSISDN USSD Orange BF, si fourni
-	OrangeAPIUsername       string // api_username fourni par Orange
-	OrangeAPIPassword       string // api_password fourni par Orange
-	OrangeProvider          string // valeur fixe : "101"
-	OrangePayID             string // valeur fixe : "12"
-	// Certificats (optionnels — réservés pour intégrations futures B2B)
+	OrangeAPIUsername       string // deprecated XML-RPC username
+	OrangeAPIPassword       string // deprecated XML-RPC password
+	OrangeProvider          string // deprecated XML-RPC value
+	OrangePayID             string // deprecated XML-RPC value
+	OrangeCashinTokenURL    string // endpoint GET API TOKEN fourni par OMBF
+	OrangeCashinURL         string // endpoint CASHIN fourni par OMBF
+	OrangeCashinAPIKey      string // header api-key fourni par OMBF
+	OrangeCashinUsername    string // body USERNAME token
+	OrangeCashinPassword    string // body PASSWORD token
+	OrangeCashinAgentAlias  string // body msisdn : alias agent MynaPay fourni par OBF
+	OrangeCashinAgentPIN    string // PIN agent, chiffré RSA avant envoi
+	OrangePINPublicKey      string // clé publique RSA OMBF utilisée pour chiffrer le PIN
+	// Certificats mTLS Orange BF optionnels si OMBF les impose au niveau réseau.
 	OrangeCertPublic  string
 	OrangeCertPrivate string
 
@@ -102,6 +110,10 @@ type Config struct {
 func Load() *Config {
 	_ = godotenv.Load()
 
+	orangeAPIUsername := getEnv("ORANGE_MONEY_API_USERNAME", "")
+	orangeAPIPassword := getEnv("ORANGE_MONEY_API_PASSWORD", "")
+	orangeMerchantMSISDN := getEnv("ORANGE_MONEY_MERCHANT_MSISDN", "")
+
 	return &Config{
 		Port:    getEnv("PORT", "8080"),
 		GinMode: getEnv("GIN_MODE", "debug"),
@@ -132,13 +144,21 @@ func Load() *Config {
 		OrangeEnv:               getEnv("ORANGE_MONEY_ENV", "test"),
 		OrangeTestURL:           getEnv("ORANGE_MONEY_TEST_URL", "https://testom.orange.bf/"),
 		OrangeProdURL:           getEnv("ORANGE_MONEY_PROD_URL", "https://apiom.orange.bf/"),
-		OrangeMerchantMSISDN:    getEnv("ORANGE_MONEY_MERCHANT_MSISDN", ""),
+		OrangeMerchantMSISDN:    orangeMerchantMSISDN,
 		OrangeBeneficiaryMSISDN: getEnv("ORANGE_MONEY_BENEFICIARY_MSISDN", ""),
 		OrangeUSSDMSISDN:        getEnv("ORANGE_MONEY_USSD_MSISDN", ""),
-		OrangeAPIUsername:       getEnv("ORANGE_MONEY_API_USERNAME", ""),
-		OrangeAPIPassword:       getEnv("ORANGE_MONEY_API_PASSWORD", ""),
+		OrangeAPIUsername:       orangeAPIUsername,
+		OrangeAPIPassword:       orangeAPIPassword,
 		OrangeProvider:          getEnv("ORANGE_MONEY_PROVIDER", "101"),
 		OrangePayID:             getEnv("ORANGE_MONEY_PAYID", "12"),
+		OrangeCashinTokenURL:    getEnv("ORANGE_MONEY_CASHIN_TOKEN_URL", ""),
+		OrangeCashinURL:         getEnv("ORANGE_MONEY_CASHIN_URL", ""),
+		OrangeCashinAPIKey:      getEnv("ORANGE_MONEY_CASHIN_API_KEY", ""),
+		OrangeCashinUsername:    getEnv("ORANGE_MONEY_CASHIN_USERNAME", orangeAPIUsername),
+		OrangeCashinPassword:    getEnv("ORANGE_MONEY_CASHIN_PASSWORD", orangeAPIPassword),
+		OrangeCashinAgentAlias:  getEnv("ORANGE_MONEY_AGENT_ALIAS", orangeMerchantMSISDN),
+		OrangeCashinAgentPIN:    getEnv("ORANGE_MONEY_AGENT_PIN", ""),
+		OrangePINPublicKey:      getEnv("ORANGE_MONEY_PIN_PUBLIC_KEY", ""),
 		OrangeCertPublic:        getEnv("ORANGE_MONEY_CERT_PUBLIC", ""),
 		OrangeCertPrivate:       getEnv("ORANGE_MONEY_CERT_PRIVATE", ""),
 

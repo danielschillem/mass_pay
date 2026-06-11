@@ -3,7 +3,8 @@ import { useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import {
   ArrowLeft, CheckCircle2, XCircle, Upload, MessageSquare,
-  Clock, FileText, Shield, AlertTriangle, Check, X, RefreshCw
+  Clock, FileText, Shield, AlertTriangle, Check, X, Eye,
+  Download, ZoomIn, ZoomOut, RotateCw,
 } from "lucide-react";
 import { api } from "@/lib/api";
 import type {
@@ -251,6 +252,211 @@ export default function KYBDetailPage() {
   );
 }
 
+// ── Document Viewer Modal ──────────────────────────────────────────
+
+function DocumentViewerModal({ doc, tenantId, onClose, onReview }: {
+  doc: KYBDocument; tenantId: string;
+  onClose: () => void;
+  onReview: (docId: string, status: string, note?: string) => Promise<void>;
+}) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [mimeType, setMimeType] = useState<string>("");
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [zoom, setZoom] = useState(1);
+  const [rotation, setRotation] = useState(0);
+  const [showRejectInput, setShowRejectInput] = useState(false);
+  const [rejectNote, setRejectNote] = useState("");
+  const [reviewing, setReviewing] = useState(false);
+
+  useEffect(() => {
+    let revoked = false;
+    setLoading(true);
+    setLoadError(null);
+    api.admin.kybDocumentBlob(tenantId, doc.id)
+      .then(({ url, mimeType: mt }) => {
+        if (!revoked) { setBlobUrl(url); setMimeType(mt); }
+      })
+      .catch(err => { if (!revoked) setLoadError((err as Error).message); })
+      .finally(() => { if (!revoked) setLoading(false); });
+    return () => {
+      revoked = true;
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [doc.id]);
+
+  const handleApprove = async () => {
+    setReviewing(true);
+    try { await onReview(doc.id, "approved"); onClose(); }
+    finally { setReviewing(false); }
+  };
+
+  const handleReject = async () => {
+    setReviewing(true);
+    try { await onReview(doc.id, "rejected", rejectNote.trim() || undefined); onClose(); }
+    finally { setReviewing(false); }
+  };
+
+  const isImage = mimeType.startsWith("image/");
+  const isPdf   = mimeType === "application/pdf";
+  const statusColor = doc.status === "approved" ? "var(--green)" :
+    doc.status === "rejected" ? "var(--red)" : "var(--gold)";
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.85)", zIndex:1100,
+      display:"flex", flexDirection:"column" }}
+      onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+
+      {/* Header toolbar */}
+      <div style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px",
+        background:"var(--card)", borderBottom:"1px solid var(--border)", flexShrink:0 }}>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontWeight:700, fontSize:14, fontFamily:"'Sora',sans-serif", overflow:"hidden",
+            textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
+            {DOC_TYPE_LABELS[doc.type] ?? doc.type} — {doc.original_name}
+          </div>
+          <div style={{ fontSize:11, color:"var(--sub)", marginTop:1 }}>
+            {(doc.file_size / 1024).toFixed(0)} Ko · {doc.mime_type}
+            <span style={{ marginLeft:8, background:`color-mix(in srgb, ${statusColor} 12%, transparent)`,
+              color:statusColor, fontSize:10, fontWeight:700, padding:"1px 8px",
+              borderRadius:6, textTransform:"uppercase" }}>
+              {doc.status === "approved" ? "Approuvé" : doc.status === "rejected" ? "Rejeté" : "En attente"}
+            </span>
+          </div>
+        </div>
+
+        {isImage && (
+          <div style={{ display:"flex", gap:6 }}>
+            <button type="button" title="Zoom +" onClick={() => setZoom(z => Math.min(z + 0.25, 4))}
+              style={toolBtn}><ZoomIn size={15} /></button>
+            <button type="button" title="Zoom -" onClick={() => setZoom(z => Math.max(z - 0.25, 0.25))}
+              style={toolBtn}><ZoomOut size={15} /></button>
+            <button type="button" title="Rotation" onClick={() => setRotation(r => (r + 90) % 360)}
+              style={toolBtn}><RotateCw size={15} /></button>
+          </div>
+        )}
+
+        {blobUrl && (
+          <a href={blobUrl} download={doc.original_name}
+            style={{ ...toolBtn, textDecoration:"none", display:"flex", alignItems:"center",
+              justifyContent:"center" }} title="Télécharger">
+            <Download size={15} />
+          </a>
+        )}
+
+        <button type="button" onClick={onClose} aria-label="Fermer"
+          style={{ ...toolBtn, color:"var(--red)" }}><X size={16} /></button>
+      </div>
+
+      {/* Document area */}
+      <div style={{ flex:1, overflow:"auto", display:"flex", alignItems:"center",
+        justifyContent:"center", padding:16, position:"relative" }}>
+        {loading && (
+          <div style={{ display:"flex", flexDirection:"column", alignItems:"center", gap:12 }}>
+            <div style={{ width:36, height:36, border:"3px solid var(--gold)",
+              borderTopColor:"transparent", borderRadius:"50%",
+              animation:"spin .8s linear infinite" }} />
+            <div style={{ color:"var(--sub)", fontSize:13 }}>Chargement du document…</div>
+            <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+          </div>
+        )}
+        {!loading && loadError && (
+          <div style={{ background:"var(--red-sub)", border:"1px solid var(--red-border)",
+            color:"var(--red)", borderRadius:10, padding:"20px 28px", fontSize:13, fontWeight:600,
+            textAlign:"center", maxWidth:360 }}>
+            <AlertTriangle size={24} style={{ marginBottom:8, display:"block", margin:"0 auto 10px" }} />
+            {loadError}
+          </div>
+        )}
+        {!loading && !loadError && blobUrl && (
+          <>
+            {isPdf && (
+              <iframe src={blobUrl} title={doc.original_name}
+                style={{ width:"100%", height:"100%", minHeight:"70vh", border:"none",
+                  borderRadius:6, background:"#fff" }} />
+            )}
+            {isImage && (
+              <img src={blobUrl} alt={doc.original_name}
+                style={{ maxWidth:"100%", maxHeight:"75vh", objectFit:"contain",
+                  transform:`scale(${zoom}) rotate(${rotation}deg)`,
+                  transformOrigin:"center center", transition:"transform .2s",
+                  borderRadius:4, boxShadow:"0 4px 32px rgba(0,0,0,.4)" }} />
+            )}
+            {!isPdf && !isImage && (
+              <div style={{ background:"var(--card)", border:"1px solid var(--border)",
+                borderRadius:10, padding:"28px 36px", textAlign:"center" }}>
+                <FileText size={40} color="var(--sub)" style={{ marginBottom:12 }} />
+                <div style={{ fontWeight:700, fontSize:14, marginBottom:4 }}>Aperçu non disponible</div>
+                <div style={{ color:"var(--sub)", fontSize:12, marginBottom:16 }}>
+                  Ce type de fichier ne peut pas être affiché directement.
+                </div>
+                <a href={blobUrl} download={doc.original_name}
+                  style={{ background:"var(--blue)", color:"#fff", padding:"9px 18px",
+                    borderRadius:8, fontWeight:700, fontSize:13, textDecoration:"none",
+                    display:"inline-flex", alignItems:"center", gap:6 }}>
+                  <Download size={13} /> Télécharger
+                </a>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Action footer — only for pending docs */}
+      {doc.status === "pending" && (
+        <div style={{ flexShrink:0, background:"var(--card)", borderTop:"1px solid var(--border)",
+          padding:"12px 20px", display:"flex", alignItems:"flex-start", gap:10 }}>
+          {!showRejectInput ? (
+            <>
+              <button type="button" onClick={handleApprove} disabled={reviewing}
+                style={{ background:"var(--green)", color:"#fff", border:"none", padding:"10px 22px",
+                  borderRadius:9, fontWeight:700, fontSize:13, cursor:"pointer",
+                  display:"flex", alignItems:"center", gap:7, opacity: reviewing ? .6 : 1 }}>
+                <Check size={15} /> Approuver
+              </button>
+              <button type="button" onClick={() => setShowRejectInput(true)} disabled={reviewing}
+                style={{ background:"var(--red-sub)", color:"var(--red)",
+                  border:"1px solid var(--red-border)", padding:"10px 22px",
+                  borderRadius:9, fontWeight:700, fontSize:13, cursor:"pointer",
+                  display:"flex", alignItems:"center", gap:7 }}>
+                <X size={15} /> Rejeter
+              </button>
+            </>
+          ) : (
+            <div style={{ display:"flex", flex:1, gap:8, alignItems:"flex-start" }}>
+              <textarea value={rejectNote} onChange={e => setRejectNote(e.target.value)}
+                placeholder="Motif du rejet (optionnel)…" autoFocus
+                style={{ flex:1, minHeight:44, background:"var(--elevated)",
+                  border:"1px solid var(--border)", borderRadius:8, padding:"10px 12px",
+                  color:"var(--text)", fontSize:13, outline:"none", resize:"none",
+                  fontFamily:"'DM Sans',sans-serif" }} />
+              <button type="button" onClick={handleReject} disabled={reviewing}
+                style={{ background:"var(--red)", color:"#fff", border:"none",
+                  padding:"10px 18px", borderRadius:8, fontWeight:700, fontSize:13,
+                  cursor:"pointer", opacity: reviewing ? .6 : 1, whiteSpace:"nowrap" }}>
+                Confirmer le rejet
+              </button>
+              <button type="button" onClick={() => { setShowRejectInput(false); setRejectNote(""); }}
+                style={{ background:"var(--elevated)", border:"1px solid var(--border)",
+                  color:"var(--mid)", padding:"10px 14px", borderRadius:8,
+                  cursor:"pointer", fontSize:13, fontWeight:600, whiteSpace:"nowrap" }}>
+                Annuler
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+const toolBtn: React.CSSProperties = {
+  background: "var(--elevated)", border: "1px solid var(--border)",
+  borderRadius: 7, padding: "6px 9px", cursor: "pointer",
+  color: "var(--mid)", display: "flex", alignItems: "center",
+};
+
 // ── Documents Tab ──────────────────────────────────────────────────
 
 function DocumentsTab({ docs, tenantId, onReview, onRefresh }: {
@@ -270,6 +476,7 @@ function DocumentsTab({ docs, tenantId, onReview, onRefresh }: {
   const [uploadError, setUploadError] = useState("");
   const [rejectDoc, setRejectDoc] = useState<KYBDocument | null>(null);
   const [rejectNote, setRejectNote] = useState("");
+  const [viewDoc, setViewDoc] = useState<KYBDocument | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const resetUpload = () => {
@@ -319,6 +526,18 @@ function DocumentsTab({ docs, tenantId, onReview, onRefresh }: {
 
   return (
     <div>
+      {viewDoc && (
+        <DocumentViewerModal
+          doc={viewDoc}
+          tenantId={tenantId}
+          onClose={() => setViewDoc(null)}
+          onReview={async (docId, status, note) => {
+            await onReview(docId, status, note);
+            setViewDoc(null);
+          }}
+        />
+      )}
+
       {rejectDoc && (
         <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,.7)", zIndex:999,
           display:"flex", alignItems:"center", justifyContent:"center" }}
@@ -486,9 +705,17 @@ function DocumentsTab({ docs, tenantId, onReview, onRefresh }: {
                     {doc.status === "approved" ? "Approuvé" : doc.status === "rejected" ? "Rejeté" : "En attente"}
                   </span>
                 </div>
-                <div style={{ fontSize:11, color:"var(--sub)" }}>
+                <button type="button" onClick={() => setViewDoc(doc)}
+                  style={{ background:"none", border:"none", padding:0, cursor:"pointer",
+                    fontSize:11, color:"var(--blue)", display:"flex", alignItems:"center", gap:4,
+                    textDecoration:"underline", textDecorationColor:"transparent",
+                    transition:"text-decoration-color .15s" }}
+                  onMouseEnter={e => (e.currentTarget.style.textDecorationColor = "var(--blue)")}
+                  onMouseLeave={e => (e.currentTarget.style.textDecorationColor = "transparent")}
+                  title="Ouvrir le document">
+                  <Eye size={11} />
                   {doc.original_name} · {(doc.file_size / 1024).toFixed(0)} Ko
-                </div>
+                </button>
                 {doc.review_note && (
                   <div style={{ marginTop:6, fontSize:12, color:"var(--mid)", fontStyle:"italic",
                     background:"var(--surf)", borderRadius:6, padding:"6px 10px" }}>
@@ -496,7 +723,13 @@ function DocumentsTab({ docs, tenantId, onReview, onRefresh }: {
                   </div>
                 )}
               </div>
-              <div style={{ display:"flex", gap:6, flexShrink:0 }}>
+              <div style={{ display:"flex", gap:6, flexShrink:0, alignItems:"center" }}>
+                <button type="button" title="Visualiser le document" onClick={() => setViewDoc(doc)}
+                  style={{ background:"var(--elevated)", border:"1px solid var(--border)",
+                    borderRadius:7, padding:"6px 9px", cursor:"pointer", color:"var(--blue)",
+                    display:"flex", alignItems:"center", gap:4, fontSize:11, fontWeight:700 }}>
+                  <Eye size={13} /> Voir
+                </button>
                 {doc.status === "pending" && (
                   <>
                     <button type="button" title="Approuver" onClick={() => onReview(doc.id, "approved")}

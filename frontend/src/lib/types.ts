@@ -136,7 +136,15 @@ export interface LoginResponse {
     role: UserRole;
     tenant_id: string | null;
     tenant_name: string;
+    tenant_status: TenantStatus | "";
+    totp_enabled: boolean;
   };
+}
+
+export interface TenantKYBStatus {
+  status: TenantStatus;
+  docs: KYBDocument[];
+  comments: KYBComment[];
 }
 
 export interface CreateBatchItemInput {
@@ -172,6 +180,7 @@ export interface UpdateBeneficiaryRequest {
   group_name?: string;
   default_amount?: number;
   external_ref?: string;
+  is_active?: boolean;
 }
 
 export interface TenantDetail {
@@ -253,7 +262,7 @@ export const fcfa = (n: number): string =>
 
 export const shortFcfa = (n: number): string => {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M FCFA";
-  if (n >= 1_000) return (n / 1_000).toFixed(0) + "K FCFA";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K FCFA";
   return n + " FCFA";
 };
 

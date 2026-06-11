@@ -65,6 +65,7 @@ export default function TenantDashboard() {
   const [stats, setStats]           = useState<DashboardStats | null>(null);
   const [batches, setBatches]       = useState<Batch[]>([]);
   const [loading, setLoading]       = useState(true);
+  const [loadError, setLoadError]   = useState("");
   const [showRecharge, setShowRecharge] = useState(false);
 
   useEffect(() => {
@@ -74,11 +75,20 @@ export default function TenantDashboard() {
         setStats(d.stats);
         setBatches(d.recent_batches ?? []);
       })
-      .catch(console.error)
+      .catch((e: unknown) => setLoadError(e instanceof Error ? e.message : "Erreur de chargement du tableau de bord"))
       .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Loader />;
+
+  if (loadError) return (
+    <div style={{ padding: "40px 0", textAlign: "center" }}>
+      <div style={{ color: "var(--red)", fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{loadError}</div>
+      <button onClick={() => window.location.reload()} style={{ background: "var(--elevated)", border: "1px solid var(--border)", color: "var(--mid)", padding: "8px 18px", borderRadius: 8, cursor: "pointer", fontSize: 13 }}>
+        Réessayer
+      </button>
+    </div>
+  );
 
   return (
     <div>
@@ -160,7 +170,7 @@ export default function TenantDashboard() {
       <div style={{ display:"flex", gap:14, marginBottom:22, flexWrap:"wrap" }}>
         <StatCard icon={TrendingUp}    label="Volume ce mois"    value={shortFcfa(stats?.monthly_volume_fcfa ?? 0)} color="var(--blue)" />
         <StatCard icon={Layers}        label="Batchs complétés"  value={stats?.total_batches ?? 0} />
-        <StatCard icon={Users}         label="Bénéficiaires"     value={stats?.total_beneficiaries ?? 0} color="var(--green)" />
+        <StatCard icon={Users}         label="Bénéf. actifs"     value={stats?.total_beneficiaries ?? 0} color="var(--green)" />
         <StatCard icon={AlertTriangle} label="Virements échoués" value={stats?.failed_items ?? 0}   color="var(--red)" />
       </div>
 

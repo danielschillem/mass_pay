@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import type { Route } from "next";
-import { Building2, Activity, TrendingUp, AlertTriangle, Users, Shield, Ban, Clock, DollarSign } from "lucide-react";
+import { Building2, Activity, TrendingUp, AlertTriangle, Users, Shield, Ban, Clock, DollarSign, Layers } from "lucide-react";
 import { api } from "@/lib/api";
 import type { GlobalStats, Tenant, PaginatedResponse } from "@/lib/types";
 import { StatCard } from "@/components/ui/StatCard";
@@ -10,9 +10,10 @@ import { Badge } from "@/components/ui/Badge";
 import { shortFcfa } from "@/lib/types";
 
 export default function AdminDashboard() {
-  const [stats, setStats] = useState<GlobalStats | null>(null);
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [stats, setStats]       = useState<GlobalStats | null>(null);
+  const [tenants, setTenants]   = useState<Tenant[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   useEffect(() => {
     Promise.all([
@@ -21,10 +22,22 @@ export default function AdminDashboard() {
     ]).then(([s, t]) => {
       setStats(s);
       setTenants((t as PaginatedResponse<Tenant>).data);
-    }).catch(console.error).finally(() => setLoading(false));
+    }).catch((e: unknown) => setLoadError(e instanceof Error ? e.message : "Erreur de chargement"))
+      .finally(() => setLoading(false));
   }, []);
 
   if (loading) return <Loader />;
+
+  if (loadError) return (
+    <div style={{ padding:"40px 0", textAlign:"center" }}>
+      <div style={{ color:"var(--red)", fontSize:14, fontWeight:600, marginBottom:12 }}>{loadError}</div>
+      <button type="button" onClick={() => window.location.reload()}
+        style={{ background:"var(--elevated)", border:"1px solid var(--border)", color:"var(--mid)",
+          padding:"8px 18px", borderRadius:8, cursor:"pointer", fontSize:13 }}>
+        Réessayer
+      </button>
+    </div>
+  );
 
   const alerts: { label: string; count: number; color: string; icon: React.ElementType; href: Route }[] = [];
   if (stats && stats.kyb_pending_count > 0) {
@@ -77,7 +90,7 @@ export default function AdminDashboard() {
           sub="revenus plateforme" color="var(--green)" />
         <StatCard icon={DollarSign}    label="Recharges totales" value={shortFcfa(stats?.total_recharges_fcfa ?? 0)}
           sub="versements admin"    color="var(--violet)" />
-        <StatCard icon={Users}         label="Batchs complétés" value={stats?.total_batches ?? 0}
+        <StatCard icon={Layers}        label="Batchs complétés" value={stats?.total_batches ?? 0}
           sub="tous temps"       color="var(--violet)" />
       </div>
 

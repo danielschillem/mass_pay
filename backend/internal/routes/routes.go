@@ -117,6 +117,7 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 			{
 				kyb.GET("/documents", adminH.ListKYBDocuments)
 				kyb.POST("/documents", adminH.UploadKYBDocument)
+				kyb.GET("/documents/:docId/file", adminH.GetKYBDocumentFile)
 				kyb.PATCH("/documents/:docId/review", adminH.ReviewKYBDocument)
 				kyb.GET("/comments", adminH.ListKYBComments)
 				kyb.POST("/comments", adminH.AddKYBComment)
@@ -190,6 +191,13 @@ func Setup(db *gorm.DB, rdb *redis.Client, cfg *config.Config, workerFn handlers
 		}
 
 		tenant.GET("/wallet/transactions", tenantH.ListWalletTransactions)
+
+		// KYB self-service — accessible même en statut kyb_pending/prospect
+		kybSelf := tenant.Group("/kyb")
+		{
+			kybSelf.GET("/status", tenantH.GetMyKYBStatus)
+			kybSelf.POST("/documents", tenantH.UploadMyKYBDocument)
+		}
 
 		users := tenant.Group("/users")
 		{

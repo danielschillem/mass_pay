@@ -359,6 +359,58 @@ func (n *Notifier) TenantKYBRejected(ctx context.Context, tenant *models.Tenant,
 	n.send(ctx, to, subject, html, text)
 }
 
+// TenantSuspended notifie le tenant admin que son compte a été suspendu.
+func (n *Notifier) TenantSuspended(ctx context.Context, tenant *models.Tenant) {
+	to := n.tenantAdminEmail(tenant.ID)
+	if to == "" {
+		return
+	}
+
+	subject := "MynaPay — Votre compte a été suspendu"
+
+	html := fmt.Sprintf(`<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#F4F5F7;font-family:'Segoe UI',Arial,sans-serif">
+<table width="100%%" cellpadding="0" cellspacing="0" style="background:#F4F5F7;padding:40px 0">
+<tr><td align="center">
+<table width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 12px rgba(0,0,0,.08)">
+  <tr><td style="background:#1A1F2E;padding:28px 36px;text-align:center">
+    <span style="font-size:22px;font-weight:800;color:#E4A730;letter-spacing:-0.5px">MynaPay</span>
+  </td></tr>
+  <tr><td style="background:#F05252;padding:16px 36px;text-align:center">
+    <span style="font-size:15px;font-weight:700;color:#ffffff">Compte suspendu</span>
+  </td></tr>
+  <tr><td style="padding:32px 36px">
+    <p style="margin:0 0 16px;font-size:16px;font-weight:700;color:#1A1F2E">Votre accès MynaPay a été suspendu</p>
+    <p style="margin:0 0 24px;font-size:14px;color:#6B7280;line-height:1.7">
+      Le compte de <strong style="color:#1A1F2E">%s</strong> sur la plateforme MynaPay BF a été temporairement suspendu.
+      Vous ne pouvez plus effectuer de virements ni accéder à votre espace.
+    </p>
+    <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;padding:16px 20px;margin-bottom:24px">
+      <p style="margin:0;font-size:13px;color:#991B1B;line-height:1.6">
+        Pour toute question concernant cette suspension, veuillez contacter le support MynaPay.
+      </p>
+    </div>
+  </td></tr>
+  <tr><td style="background:#F9FAFB;padding:18px 36px;text-align:center;border-top:1px solid #E5E7EB">
+    <p style="margin:0;font-size:11px;color:#9CA3AF">© %d MynaPay BF · Ce message est automatique, ne pas répondre.</p>
+  </td></tr>
+</table>
+</td></tr></table>
+</body></html>`,
+		tenant.RaisonSociale,
+		time.Now().Year(),
+	)
+
+	text := fmt.Sprintf(
+		"MynaPay — Compte suspendu\n\nBonjour,\n\nLe compte de %s sur MynaPay BF a été suspendu. Contactez le support pour plus d'informations.",
+		tenant.RaisonSociale,
+	)
+
+	n.send(ctx, to, subject, html, text)
+}
+
 // ── Helpers ───────────────────────────────────────────────────────
 
 func fcfa(amount int64) string {

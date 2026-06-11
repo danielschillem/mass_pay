@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -9,6 +10,15 @@ import (
 
 	"masspay-bf/internal/models"
 )
+
+// isKYBRoute retourne true si le chemin est une route KYB self-service tenant.
+func isKYBRoute(path string) bool {
+	return strings.HasPrefix(path, "/api/v1/tenant/kyb")
+}
+
+func isKYBStatusRoute(method, path string) bool {
+	return method == http.MethodGet && strings.HasPrefix(path, "/api/v1/tenant/kyb/status")
+}
 
 const ctxTenant = "current_tenant"
 
@@ -54,9 +64,19 @@ func TenantGuard(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 
-		if tenant.Status == models.TenantStatusSuspended {
-			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "tenant suspendu"})
+		switch tenant.Status {
+		case models.TenantStatusSuspended:
+			if isKYBStatusRoute(c.Request.Method, c.Request.URL.Path) {
+				break
+			}
+			c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "tenant suspendu", "code": "tenant_suspended"})
 			return
+		case models.TenantStatusKYBPending, models.TenantStatusProspect:
+			// Autoriser seulement les routes KYB self-service
+			if !isKYBRoute(c.Request.URL.Path) {
+				c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "validation KYB requise", "code": "kyb_required"})
+				return
+			}
 		}
 
 		c.Set(ctxTenant, &tenant)

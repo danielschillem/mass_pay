@@ -140,12 +140,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	now := time.Now()
 	h.db.Model(&user).Update("last_login_at", now)
 
-	// Charger le nom du tenant si l'utilisateur en a un
+	// Charger le nom et statut du tenant si l'utilisateur en a un
 	tenantName := ""
+	tenantStatus := ""
 	if user.TenantID != nil {
 		var tenant models.Tenant
-		if err := h.db.Select("raison_sociale").First(&tenant, "id = ?", *user.TenantID).Error; err == nil {
+		if err := h.db.Select("raison_sociale, status").First(&tenant, "id = ?", *user.TenantID).Error; err == nil {
 			tenantName = tenant.RaisonSociale
+			tenantStatus = string(tenant.Status)
 		}
 	}
 
@@ -154,13 +156,14 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		"refresh_token": rawRefresh,
 		"expires_in":    h.cfg.JWTExpiryHours * 3600,
 		"user": gin.H{
-			"id":           user.ID,
-			"email":        user.Email,
-			"full_name":    user.FullName(),
-			"role":         user.Role,
-			"tenant_id":    user.TenantID,
-			"tenant_name":  tenantName,
-			"totp_enabled": user.TOTPEnabled,
+			"id":            user.ID,
+			"email":         user.Email,
+			"full_name":     user.FullName(),
+			"role":          user.Role,
+			"tenant_id":     user.TenantID,
+			"tenant_name":   tenantName,
+			"tenant_status": tenantStatus,
+			"totp_enabled":  user.TOTPEnabled,
 		},
 	})
 }
@@ -299,7 +302,24 @@ func (h *AuthHandler) Me(c *gin.Context) {
 		c.JSON(http.StatusForbidden, gin.H{"error": "compte désactivé"})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"user": user})
+	tenantStatus := ""
+	if user.TenantID != nil {
+		var tenant models.Tenant
+		if err := h.db.Select("status").First(&tenant, "id = ?", *user.TenantID).Error; err == nil {
+			tenantStatus = string(tenant.Status)
+		}
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"user": gin.H{
+			"id":            user.ID,
+			"email":         user.Email,
+			"full_name":     user.FullName(),
+			"role":          user.Role,
+			"tenant_id":     user.TenantID,
+			"tenant_status": tenantStatus,
+			"totp_enabled":  user.TOTPEnabled,
+		},
+	})
 }
 
 // ── 2FA TOTP ─────────────────────────────────────────────────────
@@ -609,18 +629,31 @@ func (h *AdminHandler) ActivateTenant(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
 		return
 	}
+	callerID := middleware.GetCallerID(c)
 
-	result := h.db.Model(&models.Tenant{}).Where("id = ?", tenantID).
-		Update("status", models.TenantStatusActive)
-	if result.RowsAffected == 0 {
+	var tenant models.Tenant
+	if err := h.db.First(&tenant, "id = ?", tenantID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "tenant introuvable"})
 		return
 	}
+
+	oldStatus := tenant.Status
+	newStatus := models.TenantStatusActive
+	if err := h.db.Model(&tenant).Update("status", newStatus).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.db.Create(&models.KYBHistory{
+		TenantID:  tenantID,
+		Action:    "tenant_activated",
+		OldStatus: &oldStatus,
+		NewStatus: &newStatus,
+		CreatedBy: callerID,
+	})
+
 	if h.notifier != nil {
-		var tenant models.Tenant
-		if h.db.First(&tenant, "id = ?", tenantID).Error == nil {
-			go h.notifier.TenantActivated(c.Request.Context(), &tenant)
-		}
+		go h.notifier.TenantActivated(c.Request.Context(), &tenant)
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "tenant activé"})
 }
@@ -632,11 +665,31 @@ func (h *AdminHandler) SuspendTenant(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
 		return
 	}
-	result := h.db.Model(&models.Tenant{}).Where("id = ?", tenantID).
-		Update("status", models.TenantStatusSuspended)
-	if result.RowsAffected == 0 {
+	callerID := middleware.GetCallerID(c)
+
+	var tenant models.Tenant
+	if err := h.db.First(&tenant, "id = ?", tenantID).Error; err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": "tenant introuvable"})
 		return
+	}
+
+	oldStatus := tenant.Status
+	newStatus := models.TenantStatusSuspended
+	if err := h.db.Model(&tenant).Update("status", newStatus).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.db.Create(&models.KYBHistory{
+		TenantID:  tenantID,
+		Action:    "tenant_suspended",
+		OldStatus: &oldStatus,
+		NewStatus: &newStatus,
+		CreatedBy: callerID,
+	})
+
+	if h.notifier != nil {
+		go h.notifier.TenantSuspended(c.Request.Context(), &tenant)
 	}
 	c.JSON(http.StatusOK, gin.H{"message": "tenant suspendu"})
 }
@@ -697,25 +750,6 @@ func (h *AdminHandler) ListTenantWalletTransactions(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"data": txs, "total": total, "page": page, "size": size})
 }
 
-// GlobalStats retourne les métriques globales plateforme.
-func (h *AdminHandler) GlobalStats(c *gin.Context) {
-	var stats struct {
-		TotalTenants    int64 `json:"total_tenants"`
-		ActiveTenants   int64 `json:"active_tenants"`
-		TotalVolume     int64 `json:"total_volume_fcfa"`
-		TotalCommission int64 `json:"total_commission_fcfa"`
-		TotalBatches    int64 `json:"total_batches"`
-	}
-
-	h.db.Model(&models.Tenant{}).Count(&stats.TotalTenants)
-	h.db.Model(&models.Tenant{}).Where("status = ?", models.TenantStatusActive).Count(&stats.ActiveTenants)
-	h.db.Model(&models.Wallet{}).Select("COALESCE(SUM(total_debited), 0)").Scan(&stats.TotalVolume)
-	h.db.Model(&models.Wallet{}).Select("COALESCE(SUM(total_commission), 0)").Scan(&stats.TotalCommission)
-	h.db.Model(&models.Batch{}).Where("status = ?", models.BatchStatusCompleted).Count(&stats.TotalBatches)
-
-	c.JSON(http.StatusOK, stats)
-}
-
 // ── Tenant ────────────────────────────────────────────────────────
 
 type TenantHandler struct {
@@ -767,6 +801,105 @@ func (h *TenantHandler) Dashboard(c *gin.Context) {
 		"stats":          stats,
 		"recent_batches": recentBatches,
 	})
+}
+
+// GetMyKYBStatus retourne le statut KYB, les documents et commentaires du tenant connecté.
+func (h *TenantHandler) GetMyKYBStatus(c *gin.Context) {
+	tenant := middleware.GetCurrentTenant(c)
+
+	var docs []models.KYBDocument
+	h.db.Where("tenant_id = ?", tenant.ID).Order("created_at DESC").Find(&docs)
+
+	var comments []models.KYBComment
+	h.db.Where("tenant_id = ?", tenant.ID).Order("created_at ASC").Find(&comments)
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":   tenant.Status,
+		"docs":     docs,
+		"comments": comments,
+	})
+}
+
+// UploadMyKYBDocument permet au tenant de soumettre un document pour son propre dossier KYB.
+func (h *TenantHandler) UploadMyKYBDocument(c *gin.Context) {
+	tenant := middleware.GetCurrentTenant(c)
+	callerID := middleware.GetCallerID(c)
+
+	var req struct {
+		Type     string `json:"type" binding:"required"`
+		FileName string `json:"file_name" binding:"required"`
+		MimeType string `json:"mime_type"`
+		FileData string `json:"file_data" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	fileBytes, err := base64.StdEncoding.DecodeString(req.FileData)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "fichier KYB invalide"})
+		return
+	}
+	if len(fileBytes) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "fichier KYB vide"})
+		return
+	}
+	if len(fileBytes) > maxKYBUploadSize {
+		c.JSON(http.StatusRequestEntityTooLarge, gin.H{"error": "fichier trop volumineux (max 10 Mo)"})
+		return
+	}
+
+	docID := uuid.New()
+	originalName := filepath.Base(strings.TrimSpace(req.FileName))
+	ext := strings.ToLower(filepath.Ext(originalName))
+	nameWithoutExt := strings.TrimSuffix(originalName, filepath.Ext(originalName))
+	safeName := strings.Trim(fileNameUnsafe.ReplaceAllString(nameWithoutExt, "_"), "._-")
+	if safeName == "" {
+		safeName = "document"
+	}
+	storedName := fmt.Sprintf("%s-%s%s", docID.String(), safeName, ext)
+	dir := filepath.Join("uploads", "kyb", tenant.ID.String())
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "création dossier KYB échouée"})
+		return
+	}
+	storedPath := filepath.Join(dir, storedName)
+	if err := os.WriteFile(storedPath, fileBytes, 0o600); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "écriture fichier KYB échouée"})
+		return
+	}
+
+	doc := models.KYBDocument{
+		ID:           docID,
+		TenantID:     tenant.ID,
+		Type:         models.KYBDocumentType(req.Type),
+		OriginalName: originalName,
+		MimeType:     req.MimeType,
+		FileSize:     int64(len(fileBytes)),
+		FilePath:     filepath.ToSlash(storedPath),
+		Status:       models.KYBDocPending,
+		UploadedBy:   callerID,
+	}
+	if err := h.db.Create(&doc).Error; err != nil {
+		_ = os.Remove(storedPath)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	h.db.Create(&models.KYBHistory{
+		TenantID:  tenant.ID,
+		Action:    "document_uploaded",
+		Comment:   fmt.Sprintf("Document %s soumis par le tenant : %s", req.Type, req.FileName),
+		CreatedBy: callerID,
+	})
+
+	// Si le tenant était en prospect (re-soumission après rejet), le repasser en kyb_pending
+	if tenant.Status == models.TenantStatusProspect {
+		h.db.Model(tenant).Update("status", models.TenantStatusKYBPending)
+	}
+
+	c.JSON(http.StatusCreated, doc)
 }
 
 // GetWallet retourne le wallet du tenant.
@@ -963,6 +1096,7 @@ func (h *TenantHandler) UpdateBeneficiary(c *gin.Context) {
 		GroupName     *string `json:"group_name"`
 		DefaultAmount *int64  `json:"default_amount"`
 		ExternalRef   *string `json:"external_ref"`
+		IsActive      *bool   `json:"is_active"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -981,6 +1115,9 @@ func (h *TenantHandler) UpdateBeneficiary(c *gin.Context) {
 	}
 	if req.ExternalRef != nil {
 		updates["external_ref"] = *req.ExternalRef
+	}
+	if req.IsActive != nil {
+		updates["is_active"] = *req.IsActive
 	}
 	if len(updates) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "aucun champ à mettre à jour"})
@@ -1352,6 +1489,46 @@ func (h *AdminHandler) UploadKYBDocument(c *gin.Context) {
 	})
 
 	c.JSON(http.StatusCreated, doc)
+}
+
+// GetKYBDocumentFile sert le fichier brut d'un document KYB.
+func (h *AdminHandler) GetKYBDocumentFile(c *gin.Context) {
+	tenantID, err := uuid.Parse(c.Param("tenantId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tenant_id invalide"})
+		return
+	}
+	docID, err := uuid.Parse(c.Param("docId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "doc_id invalide"})
+		return
+	}
+
+	var doc models.KYBDocument
+	if err := h.db.First(&doc, "id = ? AND tenant_id = ?", docID, tenantID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "document introuvable"})
+		return
+	}
+
+	absPath := filepath.FromSlash(doc.FilePath)
+	if !filepath.IsAbs(absPath) {
+		wd, _ := os.Getwd()
+		absPath = filepath.Join(wd, absPath)
+	}
+
+	data, err := os.ReadFile(absPath)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "fichier introuvable sur le serveur"})
+		return
+	}
+
+	mimeType := doc.MimeType
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
+	}
+	c.Header("Content-Disposition", fmt.Sprintf(`inline; filename="%s"`, doc.OriginalName))
+	c.Header("Cache-Control", "private, max-age=300")
+	c.Data(http.StatusOK, mimeType, data)
 }
 
 // ReviewKYBDocument approuve ou rejette un document KYB.

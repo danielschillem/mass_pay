@@ -1,0 +1,128 @@
+MYNAPAY / OBF - PARAMETRES VPN SITE-A-SITE
+
+Date: 2026-06-11
+
+1. CONTACT PARTENAIRE
+
+Company:
+
+MYNA ETOILE SARL
+
+Technical contact: Daniel Schillem KARAMBIRI
+
+Email: danielskarambiri@gmail.com
+
+Phone: 76 87 21 98
+
+
+
+2. VPN GATEWAY PARTENAIRE - MYNAPAY
+
+Provider:
+Hostinger VPS KVM 2
+
+VPN device type:
+Ubuntu 24.04 LTS + strongSwan
+
+Public IP address:
+187.127.233.228
+
+Local encryption domain:
+187.127.233.228/32
+
+Authentication method:
+Pre-Shared Key
+
+Pre-Shared Key:
+A echanger via canal securise separe
+
+
+3. VPN GATEWAY OBF
+
+OBF VPN gateway:
+197.239.106.3
+
+OBF encryption domain:
+197.239.106.83/32
+197.239.106.84/32
+
+Protocol:
+IP
+
+Application services:
+tcp/8243
+tcp/9443
+
+
+4. IKE - PHASE 1
+
+Authentication Method:
+Pre-Shared Key
+
+Encryption Scheme:
+IKE v2
+
+Perfect Forward Secrecy - IKE:
+DH Group 15
+
+Encryption Algorithm - IKE:
+AES 256
+
+Hashing Algorithm - IKE:
+SHA 256
+
+IKE SA Lifetime:
+86400 seconds
+
+XAuth:
+Disabled
+
+Mode Config:
+Disabled
+
+Aggressive Mode:
+No
+
+
+5. IPSEC - PHASE 2
+
+Transform / IPSec protocol:
+ESP
+
+Perfect Forward Secrecy - IPSec:
+DH Group 15
+
+Encryption Algorithm - IPSec:
+AES 256
+
+Hashing Algorithm - IPSec:
+SHA 256
+
+IPSec SA Lifetime:
+3600 seconds
+
+Key Exchange for Subnet:
+Yes
+
+
+6. FIREWALL / PORTS A AUTORISER COTE MYNAPAY
+
+Inbound from OBF VPN gateway 197.239.106.3:
+udp/500
+udp/4500
+ESP protocol 50, if supported by provider
+
+Outbound to OBF encryption domain:
+197.239.106.83 tcp/8243
+197.239.106.83 tcp/9443
+197.239.106.84 tcp/8243
+197.239.106.84 tcp/9443
+
+
+7. NOTES
+
+- The MynaPay VPN gateway is a Hostinger KVM 2 VPS with a dedicated public IPv4.
+- The proposed local encryption domain is the VPS public IPv4 as /32.
+- NAT-T over UDP/4500 can be used if ESP protocol 50 is not available on the hosting provider firewall.
+- The Pre-Shared Key must not be sent in this document. It should be exchanged through a secure channel.
+- Once the IPsec tunnel is established, OBF can provide the CASHIN API credentials and endpoint details.

@@ -188,9 +188,9 @@ export default function TenantDetailPage() {
       {/* Compteurs */}
       <div className="responsive-grid-auto" style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, marginBottom:24 }}>
         {[
-          { label:"Utilisateurs",  val:user_count,  icon:<Users size={16} color="var(--blue)" />,       color:"var(--blue)" },
-          { label:"Bénéficiaires", val:benef_count, icon:<Users size={16} color="var(--green)" />,       color:"var(--green)" },
-          { label:"Batches",       val:batch_count, icon:<FileText size={16} color="var(--gold)" />,    color:"var(--gold)" },
+          { label:"Utilisateurs",    val:user_count,  icon:<Users size={16} color="var(--blue)" />,    color:"var(--blue)" },
+          { label:"Bénéficiaires",  val:benef_count, icon:<Users size={16} color="var(--green)" />,   color:"var(--green)" },
+          { label:"Batches créés",  val:batch_count, icon:<FileText size={16} color="var(--gold)" />, color:"var(--gold)" },
           { label:"Wallet dispo",
             val: tenant.wallet ? fcfa(tenant.wallet.available_balance) : "—",
             icon:<WalletIcon size={16} color="var(--violet)" />, color:"var(--violet)" },

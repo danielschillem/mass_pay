@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { Search, Plus, Upload, Trash2, X, Pencil, CheckCircle, AlertCircle, Download, Filter } from "lucide-react";
+import { Search, Plus, Upload, Trash2, X, Pencil, CheckCircle, AlertCircle, Download, Filter, ShieldCheck, ShieldOff } from "lucide-react";
 import { api } from "@/lib/api";
 import type { Beneficiary } from "@/lib/types";
 import { OpBadge } from "@/components/ui/StatCard";
@@ -478,11 +478,19 @@ export default function BeneficiariesPage() {
         const groups = [...new Set(r.data.map(b => b.group_name).filter(Boolean))] as string[];
         setAllGroups(groups);
       })
-      .catch(console.error)
+      .catch((e: unknown) => flash(e instanceof Error ? e.message : "Erreur de chargement"))
       .finally(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
+
+  const toggleActive = async (b: Beneficiary) => {
+    try {
+      const updated = await api.tenant.updateBeneficiary(b.id, { is_active: !b.is_active });
+      setBenefs(bs => bs.map(x => x.id === b.id ? updated : x));
+      flash(`${b.full_name} ${updated.is_active ? "activé" : "désactivé"}`);
+    } catch (e: unknown) { flash((e as Error).message); }
+  };
 
   const deleteBenef = async (b: Beneficiary) => {
     if (!confirm(`Supprimer ${b.full_name} ?`)) return;
@@ -603,7 +611,7 @@ export default function BeneficiariesPage() {
         <table style={{ width:"100%", borderCollapse:"collapse" }}>
           <thead>
             <tr style={{ borderBottom:"1px solid var(--border)", background:"var(--surf)" }}>
-              {["Nom","Téléphone","Opérateur","Groupe","Montant habituel","Actions"].map(h => (
+              {["Nom","Téléphone","Opérateur","Groupe","Montant habituel","Statut","Actions"].map(h => (
                 <th key={h} style={{ padding:"10px 20px", textAlign:"left",
                   color:"var(--sub)", fontSize:10, fontWeight:700,
                   textTransform:"uppercase", letterSpacing:".5px" }}>{h}</th>
@@ -612,10 +620,10 @@ export default function BeneficiariesPage() {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ padding:"40px", textAlign:"center" }}><Spinner /></td></tr>
+              <tr><td colSpan={7} style={{ padding:"40px", textAlign:"center" }}><Spinner /></td></tr>
             ) : benefs.length === 0 ? (
               <tr>
-                <td colSpan={6} style={{ padding:"40px", textAlign:"center",
+                <td colSpan={7} style={{ padding:"40px", textAlign:"center",
                   color:"var(--sub)", fontSize:13 }}>
                   Aucun bénéficiaire · commencez par ajouter ou importer une liste
                 </td>
@@ -631,12 +639,28 @@ export default function BeneficiariesPage() {
                   {b.default_amount > 0 ? b.default_amount.toLocaleString("fr-FR") + " F" : "—"}
                 </td>
                 <td style={{ padding:"13px 20px" }}>
+                  <span style={{
+                    background: b.is_active ? "var(--green-sub)" : "var(--red-sub)",
+                    color: b.is_active ? "var(--green)" : "var(--red)",
+                    fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:8,
+                  }}>
+                    {b.is_active ? "Actif" : "Inactif"}
+                  </span>
+                </td>
+                <td style={{ padding:"13px 20px" }}>
                   <div style={{ display:"flex", gap:6 }}>
                     <button type="button" onClick={() => setEditing(b)}
                       aria-label={`Modifier ${b.full_name}`}
                       style={{ background:"var(--elevated)", border:"1px solid var(--border)",
                         borderRadius:7, padding:"5px 9px", color:"var(--mid)", cursor:"pointer" }}>
                       <Pencil size={12} />
+                    </button>
+                    <button type="button" onClick={() => toggleActive(b)}
+                      title={b.is_active ? "Désactiver" : "Activer"}
+                      style={{ background:"var(--elevated)", border:"1px solid var(--border)",
+                        borderRadius:7, padding:"5px 9px",
+                        color: b.is_active ? "var(--red)" : "var(--green)", cursor:"pointer" }}>
+                      {b.is_active ? <ShieldOff size={12} /> : <ShieldCheck size={12} />}
                     </button>
                     <button type="button" onClick={() => deleteBenef(b)}
                       disabled={deleting.has(b.id)}

@@ -35,14 +35,15 @@ export function StatCard({
 
 export function OpBadge({ op }: { op: string }) {
   const isOrange = op === "orange";
+  const isMoov = op === "moov";
   const style = {
-    "--badge-bg": isOrange ? "rgba(255, 140, 0, .14)" : "var(--blue-sub)",
-    "--badge-fg": isOrange ? "#e87800" : "var(--blue)",
+    "--badge-bg": isOrange ? "rgba(255, 140, 0, .14)" : isMoov ? "var(--blue-sub)" : "var(--elevated)",
+    "--badge-fg": isOrange ? "#e87800" : isMoov ? "var(--blue)" : "var(--sub)",
   } as CSSProperties;
 
   return (
     <span className="badge" style={style}>
-      {isOrange ? "Orange" : "Moov"}
+      {isOrange ? "Orange" : isMoov ? "Moov" : "–"}
     </span>
   );
 }

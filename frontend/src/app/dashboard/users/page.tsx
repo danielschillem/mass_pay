@@ -204,7 +204,7 @@ export default function UsersPage() {
     setLoading(true);
     api.tenant.users()
       .then(r => { setUsers(r.data); setTotal(r.total); })
-      .catch(console.error)
+      .catch((e: unknown) => flash(e instanceof Error ? e.message : "Erreur de chargement"))
       .finally(() => setLoading(false));
   };
 

@@ -24,7 +24,13 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.replace("/admin");
       return;
     }
-    // 3. Lire les infos utilisateur
+    // 3. KYB gate — si le tenant n'est pas actif, rediriger vers l'onboarding
+    const tenantStatus = localStorage.getItem("masspay_tenant_status") ?? "";
+    if (tenantStatus && tenantStatus !== "active") {
+      router.replace("/kyb" as Parameters<typeof router.replace>[0]);
+      return;
+    }
+    // 4. Lire les infos utilisateur
     try {
       const raw = localStorage.getItem("masspay_user");
       const u   = raw ? JSON.parse(raw) : {};

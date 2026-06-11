@@ -13,14 +13,16 @@ const TX_LABELS: Record<string, { label: string; color: string; sign: string }> 
 };
 
 export default function WalletPage() {
-  const [wallet, setWallet]   = useState<Wallet | null>(null);
-  const [txs, setTxs]         = useState<WalletTransaction[]>([]);
-  const [total, setTotal]     = useState(0);
-  const [page, setPage]       = useState(1);
-  const [loading, setLoading] = useState(true);
+  const [wallet, setWallet]     = useState<Wallet | null>(null);
+  const [txs, setTxs]           = useState<WalletTransaction[]>([]);
+  const [total, setTotal]       = useState(0);
+  const [page, setPage]         = useState(1);
+  const [loading, setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState("");
 
   const loadTxs = (p: number) => {
     setLoading(true);
+    setLoadError("");
     Promise.all([
       api.tenant.wallet(),
       api.tenant.walletTransactions(p, 20),
@@ -28,7 +30,8 @@ export default function WalletPage() {
       setWallet(w);
       setTxs(t.data);
       setTotal(t.total);
-    }).catch(console.error).finally(() => setLoading(false));
+    }).catch((e: unknown) => setLoadError(e instanceof Error ? e.message : "Erreur de chargement"))
+      .finally(() => setLoading(false));
   };
 
   useEffect(() => { loadTxs(1); }, []);
@@ -37,6 +40,17 @@ export default function WalletPage() {
 
   return (
     <div>
+      {loadError && (
+        <div style={{ background:"var(--red-sub)", border:"1px solid var(--red-border)",
+          color:"var(--red)", borderRadius:8, padding:"10px 16px", marginBottom:16,
+          fontSize:13, fontWeight:600, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          {loadError}
+          <button type="button" onClick={() => loadTxs(page)}
+            style={{ background:"none", border:"none", color:"var(--red)", cursor:"pointer", fontSize:12, fontWeight:700 }}>
+            Réessayer
+          </button>
+        </div>
+      )}
       <div className="page-header" style={{ display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:24 }}>
         <div>
           <h1 style={{ fontSize:22, fontWeight:800, color:"var(--text)", margin:0, fontFamily:"'Sora',sans-serif" }}>

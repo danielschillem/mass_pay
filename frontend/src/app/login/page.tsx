@@ -35,7 +35,14 @@ export default function LoginPage() {
       localStorage.setItem("masspay_role", res.user.role);
       localStorage.setItem("masspay_user", JSON.stringify(res.user));
       localStorage.setItem("masspay_tenant_name", res.user.tenant_name ?? "");
-      router.push(res.user.role === "super_admin" ? "/admin" : "/dashboard");
+      localStorage.setItem("masspay_tenant_status", res.user.tenant_status ?? "");
+      if (res.user.role === "super_admin") {
+        router.push("/admin");
+      } else if (res.user.tenant_status && res.user.tenant_status !== "active") {
+        router.push("/kyb" as Parameters<typeof router.push>[0]);
+      } else {
+        router.push("/dashboard");
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Erreur de connexion");
     } finally {
